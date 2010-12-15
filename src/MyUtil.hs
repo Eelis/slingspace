@@ -73,7 +73,7 @@ doing s a = do
 spawn :: IO () -> IO ThreadId
 spawn act = do
   t <- myThreadId
-  forkIO $ act `catch` throwTo t
+  forkIO $ act -- `catch` throwTo t
 
 atomicModifyTVar :: TVar a -> (a -> a) -> IO ()
 atomicModifyTVar v f = atomically $ readTVar v >>= writeTVar v . f

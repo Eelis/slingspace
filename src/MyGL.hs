@@ -109,21 +109,3 @@ instance Read Key where
            [((MouseButton aa) , rest) | ("MouseButton" , inp) <- lex inp ,
         (aa , rest) <- readsPrec 10 inp])
           input
-
-instance (Read a) => Read (Vector3 a) where
-    readsPrec d input =
-          readParen (d > 9)
-          (\ inp ->
-           [((Vector3 aa ab ac) , rest) | ("Vector3" , inp) <- lex inp ,
-        (aa , inp) <- readsPrec 10 inp , (ab , inp) <- readsPrec 10 inp ,
-        (ac , rest) <- readsPrec 10 inp])
-          input
-
-instance (Read a) => Read (Color4 a) where
-    readsPrec d input =
-          readParen (d > 9)
-          (\ inp ->
-           [((Color4 aa ab ac ad) , rest) | ("Color4" , inp) <- lex inp ,
-        (aa , inp) <- readsPrec 10 inp , (ab , inp) <- readsPrec 10 inp ,
-        (ac , inp) <- readsPrec 10 inp , (ad , rest) <- readsPrec 10 inp])
-          input

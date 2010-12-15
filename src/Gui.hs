@@ -77,11 +77,11 @@ data Scheme = Scheme
   , grid_color :: Color4 GLclampf
   , rope_line_width :: GLfloat
   , fog_density :: GLfloat
-  , fog_color, left_gun_color, right_gun_color
+  , fog_color, left_gun_color, right_gun_color :: Color4 GLclampf
   , lightModel_ambient
   , obstacle_material_ambient, obstacle_material_diffuse
   , ballLight_ambient, ballLight_diffuse
-  , ball_material_ambient, ball_material_diffuse :: Color4 GLclampf
+  , ball_material_ambient, ball_material_diffuse :: Color4 GLfloat
   , ballLight_attenuation :: (GLfloat, GLfloat, GLfloat)
   } deriving Read
 

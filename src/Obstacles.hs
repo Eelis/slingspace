@@ -12,6 +12,7 @@ import System.Random
 import Control.Monad
 import Graphics.UI.GLUT
 import Prelude hiding ((.))
+import Control.Arrow (first)
 
 
 {-
@@ -90,6 +91,15 @@ data InfiniteTunnelConfig = InfiniteTunnelConfig
   } deriving (Show, Read)
 -}
 
+glDouble :: Double -> GLdouble
+glDouble = realToFrac
+unGLdouble :: GLdouble -> Double
+unGLdouble = realToFrac
+  -- Todo: These are horrible, and were added just to support the following instance, needed to make things compile again now that GLdouble is a newtype with a hidden constructor.
+
+instance Random GLdouble where
+  randomR (lo, hi) = first glDouble . randomR (unGLdouble lo, unGLdouble hi)
+  random = first glDouble . random
 
 infinite_tunnel :: RandomGen g => TunnelConfig -> RngMonad g [(V, V, AnnotatedObstacle)]
 infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Vector3 0 0 0) {- from -}
