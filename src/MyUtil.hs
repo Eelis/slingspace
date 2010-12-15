@@ -15,7 +15,6 @@ import System.IO
 import Foreign
 import System (getArgs)
 import GHC.Conc
-import Control.Concurrent.STM.TVar
 import System.Console.GetOpt
 
 #ifdef linux_HOST_OS

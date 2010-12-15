@@ -11,7 +11,6 @@ import Control.Monad.Fix()
 import Logic
 import MyGL ()
 import System.Exit
-import StaticConfig
 import MyUtil
 import Prelude hiding ((.))
 import GHC.Word

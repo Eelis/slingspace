@@ -4,7 +4,6 @@ module Obstacles
   , TunnelConfig
   ) where
 
-import Debug.Trace
 import MyUtil
 import Math
 import MyGL ()
