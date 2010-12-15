@@ -1,0 +1,24 @@
+GuiConfig
+{ window_title = "SlingSpace"
+, cross_offset_hor = 11
+, cross_offset_ver = 7
+, ugly = False
+, floor_conf = Shadows
+, player_size = 35
+, cam_conf = CameraConfig
+  { viewing_dist = 20000
+  , fov = 45
+  , cam_init_dist = 600
+  , cam_min_dist = 40
+  , cam_max_dist = 5000
+  , cam_zoom_speed = 1.1
+  , mouse_speed = 10.0
+  , invert_mouse = False
+  }
+, schemeFile = "cool.scheme"
+, restart_key = (Char ' ', Down)
+, pause_key = (Char 'p', Down)
+, exit_key = (Char 'q', Down)
+, zoom_in_key = (MouseButton WheelUp, Down)
+, zoom_out_key = (MouseButton WheelDown, Down)
+}

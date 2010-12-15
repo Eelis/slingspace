@@ -1,0 +1,8 @@
+TunnelConfig
+{ allow_intersecting_obstacles = False
+, obstacle_density = 175
+, obstacle_size = 800
+, init_tunnel_width = 3000
+, max_tunnel_width = 4000
+, min_tunnel_width = 2000
+}

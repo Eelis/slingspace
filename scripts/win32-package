@@ -1,0 +1,4 @@
+#!/bin/bash -x
+# invoke as dist/win32-package from slingspace
+cd ..
+tar -czf slingspace-win32.tar.gz slingspace/schemes/* slingspace/config/* slingspace/local-infinite.exe slingspace/client.exe slingspace/glut32.dll slingspace/doc/manual.xhtml

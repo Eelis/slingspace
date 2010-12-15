@@ -1,0 +1,143 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
+<html xmlns='http://www.w3.org/1999/xhtml' xml:lang='en'>
+  <head>
+    <meta http-equiv='Keywords' content='SlingSpace'/>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8"/>
+    <title>SlingSpace</title>
+  </head>
+  <body>
+    <div style='text-align:center'>
+      <h1>SlingSpace</h1>
+      <p>
+        Version 2007021?, by <a href='http://eelis.net'>Eelis</a> van der Weegen<br/>
+        This software has been released into the <a href='http://wikipedia.org/wiki/Public_domain'>Public domain</a>
+      </p>
+    </div>
+    <h2>Table of contents</h2>
+    <ol>
+      <li><a href='#controls'>Controls</a></li>
+      <li><a href='#configuration'>Configuration</a></li>
+      <li><a href='#colorschemes'>Color schemes</a></li>
+      <li><a href='#changelog'>Changelog</a></li>
+    </ol>
+    <h2 id='controls'>1. Controls</h2>
+    <p>Almost all controls are configurable. The defaults are:</p>
+    <table border='1'>
+      <tr><td><b>Key</b></td><td><b>Action</b></td></tr>
+      <tr><td>Left mouse button down</td><td>Fire left rope</td></tr>
+      <tr><td>Right mouse button down</td><td>Fire right rope</td></tr>
+      <tr><td>Left mouse button up</td><td>Release left rope</td></tr>
+      <tr><td>Right mouse button up</td><td>Release right rope</td></tr>
+      <tr><td>Mouse wheel up</td><td>Zoom in</td></tr>
+      <tr><td>Mouse wheel down</td><td>Zoom out</td></tr>
+      <tr><td>P</td><td>Toggle pause</td></tr>
+      <tr><td>Q</td><td>Quit</td></tr>
+      <tr><td>Space</td><td>Restart</td></tr>
+    </table>
+    <h2 id='configuration'>2. Configuration</h2>
+    <p>The main configuration file is "config.txt". Its contents define, using ordinary Haskell syntax, a term of the Haskell data type <code>Config</code>, which we will define below. A data type definition of the form</p>
+    <code>data T = X ... | Y ... | Z ...</code>
+    <p>simply lists the different forms a term of type T can have. A field definition of the form</p>
+    <code>x :: T</code>
+    <p>means: "field x must be a term of type T". Two consecutive dashes mark a comment that spans to the end of the line (unfortunately comments are not allowed in the configuration file).</p>
+    <pre>
+    data Config = Config
+      { app_name :: String
+      , cross_offset_hor, cross_offset_ver :: GLdouble -- in degrees
+      , tick_duration :: Int -- in milliseconds
+      , ugly :: Bool
+      , floor_conf :: FloorConfig
+      , player_size :: GLdouble
+      , cam_conf :: CameraConfig
+      , logic_conf :: LogicConfig
+      , schemeFile :: String
+      , restart_key, pause_key, exit_key, zoom_in_key, zoom_out_key :: (Key, KeyState)
+      }
+    </pre>
+    <p><code>Config</code> refers to several other data types, which in turn refer to yet other data types:</p>
+    <pre>
+    data CameraConfig = CameraConfig
+      { viewing_dist :: GLdouble
+      , fov :: GLdouble -- in degrees
+      , cam_init_dist, cam_min_dist, cam_max_dist :: GLdouble
+      , cam_zoom_speed :: GLdouble -- in camera distance multiplication per increment
+      , mouse_speed :: GLdouble -- in pixels per degree
+      , invert_mouse :: Bool
+      }
+
+    data FloorConfig = NoFloor | Shadows | Grid { grid_size :: Integer, grid_type :: GridType }
+
+    data GridType
+      = DottedGrid { grid_dot_size :: GLfloat }
+      | LinedGrid { grid_line_width :: GLfloat }
+
+    data LogicConfig = LogicConfig
+      { rope_k, friction, shooting_speed, shooting_range :: GLdouble
+      , gravity :: Vector3 GLdouble
+      , allow_intersecting_obstacles :: Bool -- can improve performance, but causes artifacts
+      , obstacle_density :: GLdouble -- in average distance between successive obstacles
+      , obstacle_size, init_tunnel_width, max_tunnel_width, min_tunnel_width :: GLdouble
+      }
+
+    data Vector3 a = Vector3 a a a
+
+    data Key
+      = Char Char
+      | SpecialKey SpecialKey
+      | MouseButton MouseButton
+
+    data KeyState = Down | Up
+
+    data MouseButton
+      = LeftButton
+      | MiddleButton
+      | RightButton
+      | WheelUp
+      | WheelDown
+
+    data SpecialKey
+      = KeyF1 | KeyF2 | KeyF3 | KeyF4 | KeyF5 | KeyF6
+      | KeyF7 | KeyF8 | KeyF9 | KeyF10 | KeyF11 | KeyF12
+      | KeyLeft | KeyUp | KeyRight | KeyDown
+      | KeyPageUp | KeyPageDown | KeyHome | KeyEnd | KeyInsert
+    </pre>
+    <h2 id='colorschemes'>3. Color schemes</h2>
+    <p><code>Config</code>'s <code>schemeFile</code> field (see <a href='#configuration'>2. Configuration</a>) must point to a file whose contents define, again using ordinary Haskell syntax, a term of the Haskell data type <code>Scheme</code>.</p>
+    <pre>
+    data Scheme = Scheme
+      { shadow_color :: Color4 GLclampf
+      , grid_color :: Color4 GLclampf
+      , rope_line_width :: GLfloat
+      , fog_density :: GLfloat
+      , fog_color, left_gun_color, right_gun_color :: Color4 GLclampf
+      , lightModel_ambient :: Color4 GLclampf
+      , material_ambient, material_diffuse, ballLight_ambient, ballLight_diffuse, ball_color :: Color4 GLclampf
+      , ballLight_attenuation :: (GLfloat, GLfloat, GLfloat)
+      }
+
+    data Color4 a = Color4 a a a a
+    </pre>
+    For a thorough description of the effect of the *<code>_ambient</code>, *<code>_diffuse</code>, and *<code>_attenuation</code> fields, see chapters 6 and 7 of the <a href='http://fly.cc.fer.hr/~unreal/theredbook/'>OpenGL Programming Guide</a>. SlingSpace currently does not support any alpha magic, so the value of the fourth color component should always be 1.
+
+
+    <h2 id='changelog'>4. Changelog</h2>
+    <ul>
+      <li>
+        <p>2007021?</p>
+        <ul>
+          <li>Manual.</li>
+          <li>Configurable keys.</li>
+          <li>Subdirectory for schemes.</li>
+          <li>Separate ball color now works.</li>
+          <li>Minor changes in the configuration and scheme file syntax.</li>
+        </ul>
+      </li>
+      <li>
+        <p>20070212</p>
+        <ul><li>Start of changelog.</li></ul>
+      </li>
+    </ul>
+  </body>
+</html>

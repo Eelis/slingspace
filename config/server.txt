@@ -1,0 +1,4 @@
+ServerConfig
+{ default_port = 51733
+, playerdata_broadcast_interval = 100
+}

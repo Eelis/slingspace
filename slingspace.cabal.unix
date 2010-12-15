@@ -1,0 +1,38 @@
+name: slingspace
+version: 20070311
+license: PublicDomain
+author: Eelis van der Weegen
+maintainer: slingspace AT contacts DOT eelis ANOTHERDOT net
+stability: experimental
+synopsis: A 3D Spiderman-like slinging game.
+build-depends: base, haskell98, GLUT, OpenGL>=2.0, stm, network, unix
+tested-with: GHC==6.6.20070306
+data-files:
+  doc/manual.xhtml
+  schemes/cool.scheme
+  schemes/woods.scheme
+  config/gameplay.txt
+  config/client.txt
+  config/server.txt
+  config/gui.txt
+  config/finite-tunnel.txt
+  config/infinite-tunnel.txt
+category: games
+
+executable: slingspace
+main-is: local-infinite.hs
+hs-source-dirs: src
+c-sources: src/cutil.c
+ghc-options: -cpp -ffi -O2 -Wall -fno-warn-orphans -fno-warn-missing-signatures -fno-warn-unused-binds
+
+executable: slingspace-client
+main-is: client.hs
+hs-source-dirs: src
+c-sources: src/cutil.c
+ghc-options: -cpp -ffi -O2 -Wall -fno-warn-orphans -fno-warn-missing-signatures -fno-warn-unused-binds
+
+executable: slingspace-server
+main-is: server.hs
+hs-source-dirs: src
+c-sources: src/cutil.c
+ghc-options: -cpp -ffi -O2 -Wall -fno-warn-orphans -fno-warn-missing-signatures -fno-warn-unused-binds -threaded
