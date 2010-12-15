@@ -14,7 +14,7 @@ import Control.Exception (bracket)
 import System.IO (hFlush, stdout)
 import Foreign (Word16, Word64)
 import System (getArgs)
-import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, myThreadId, forkIO)
+import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, {-myThreadId,-} forkIO)
 import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
 
 #ifdef linux_HOST_OS
@@ -71,8 +71,9 @@ doing s a = do
 
 spawn :: IO () → IO ThreadId
 spawn act = do
-  t ← myThreadId
+  -- t ← myThreadId
   forkIO $ act -- `catch` throwTo t
+    -- Todo: The catch part above was commented out simply because it no longer compiled and the game ran without it.
 
 atomicModifyTVar :: TVar a → (a → a) → IO ()
 atomicModifyTVar v f = atomically $ readTVar v >>= writeTVar v . f

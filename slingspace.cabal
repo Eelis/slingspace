@@ -24,7 +24,7 @@ executable: slingspace
 main-is: local-infinite.hs
 hs-source-dirs: src
 c-sources: src/cutil.c
-ghc-options: -fglasgow-exts -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds
+ghc-options: -fglasgow-exts -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
 extensions: TemplateHaskell CPP ForeignFunctionInterface
 
 -- executable: slingspace-client

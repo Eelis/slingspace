@@ -278,7 +278,7 @@ actual_tick pauseRef cc cameraRef sch cfg cs myname gp_cfg = do
 
 
 display :: GuiCallback c ⇒ IORef GHC.Word.Word64 → c → GuiConfig → Scheme → String → Camera → ClientState → IO ()
-display tr cc cfg sch myname cam cs = do
+display _ {-tr-} cc cfg sch myname cam cs = do
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
   translate $ Vector3 0 0 (- cam_dist cam)
