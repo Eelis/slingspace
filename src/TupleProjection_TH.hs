@@ -7,15 +7,15 @@ import Control.Monad
 import MyUtil
 import Prelude hiding ((.))
 
-tupelize :: [Type] -> Type
+tupelize :: [Type] → Type
 tupelize [x] = x
 tupelize l = foldr (flip AppT) (TupleT $ length l) (reverse l)
 
-tuple_instances :: Int -> Q [Dec]
+tuple_instances :: Int → Q [Dec]
 tuple_instances max_projectable_tuple_size =
-  forM [2 .. max_projectable_tuple_size] $ \n -> do
-    type_vars@(tv0 : tvr@(tv1 : _)) <- (VarT .) . replicateM n (newName "y")
-    var_names <- replicateM n (newName "x")
+  forM [2 .. max_projectable_tuple_size] $ \n → do
+    type_vars@(tv0 : tvr@(tv1 : _)) ← (VarT .) . replicateM n (newName "y")
+    var_names ← replicateM n (newName "x")
     let ve0 : vt@(ve1 : _) = VarE . var_names
     return $ InstanceD [{- context -}]
       (ConT (mkName "Tuple") `AppT` tupelize type_vars `AppT` tv0 `AppT` tv1 `AppT` tupelize tvr)
