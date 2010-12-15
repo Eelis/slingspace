@@ -1,15 +1,15 @@
-import Gui
-import Data.IORef
-import Logic
+import Gui (gui, GuiCallback(..))
+import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
+import Logic (Player(..), PlayerBody(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
-import Math
+import Math ((<->), AnnotatedObstacle(..), readRngMonad, norm_2)
 import MyGL ()
-import System.Random
-import MyUtil
+import System.Random (getStdGen)
+import MyUtil ((.), omni_map, read_config_file)
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Obstacles
+import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
-import TupleProjection
+import TupleProjection (project)
 
 name :: String
 name = "Player"

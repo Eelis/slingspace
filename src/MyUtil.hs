@@ -4,18 +4,18 @@ module MyUtil
   ) where
 
 import Prelude hiding (catch, (.))
-import Data.IORef
+import Data.IORef (IORef, readIORef, writeIORef)
 import MyGL ()
-import Data.List
+import Data.List (minimumBy)
 import Graphics.UI.GLUT ()
-import Network.Socket
-import Control.Monad
-import Control.Exception
-import System.IO
-import Foreign
+import Network.Socket (Socket, sClose, send, recv)
+import Control.Monad (liftM, when, forever)
+import Control.Exception (bracket)
+import System.IO (hFlush, stdout)
+import Foreign (Word16, Word64)
 import System (getArgs)
-import GHC.Conc
-import System.Console.GetOpt
+import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, myThreadId, forkIO)
+import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
 
 #ifdef linux_HOST_OS
 

@@ -13,14 +13,14 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Math
-import Debug.Trace
-import Data.List
+import Math ((<+>), (<->), (</>), (<*>), annotate_obstacle, annotate_triangle, norm_2, V, AnnotatedTriangle, AnnotatedObstacle(..), ao_triangles, dist_sqrd, square, triangle_collision)
+import Debug.Trace (trace)
+import Data.List (sortBy)
 import MyGL ()
-import MyUtil
-import Data.Maybe
-import Control.Monad.Fix
-import TupleProjection
+import MyUtil ((.), minimumByMeasure)
+import Data.Maybe (mapMaybe)
+import Control.Monad.Fix (fix)
+import TupleProjection (project)
 import Prelude hiding ((.))
 
 data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)

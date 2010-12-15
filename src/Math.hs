@@ -3,10 +3,10 @@ module Math where
 import Prelude hiding ((.))
 import MyGL ()
 import Graphics.Rendering.OpenGL.GL
-import System.Random
+import System.Random (RandomGen(..), Random(..))
 import Monad
-import MyUtil
-import Data.Maybe
+import MyUtil ((.))
+import Data.Maybe (isJust)
 
 -- RANDOM STUFF
 

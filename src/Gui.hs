@@ -3,17 +3,17 @@ module Gui (GuiCallback(..), gui) where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT
-import Data.IORef
-import Math
-import Maybe
-import Control.Monad
+import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
+import Math (V, (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..))
+import Maybe (isJust)
+import Control.Monad (when, unless, forM, forM_)
 import Control.Monad.Fix()
-import Logic
+import Logic (Player(..), PlayerBody(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around)
 import MyGL ()
-import System.Exit
-import MyUtil
+import System.Exit (exitWith, ExitCode(ExitSuccess))
+import MyUtil ((.), getDataFileName, read_config_file, timeofday_usecs)
 import Prelude hiding ((.))
-import GHC.Word
+import GHC.Word (Word64)
 
 class GuiCallback c where
   cc_tick :: c → IO ()

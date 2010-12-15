@@ -4,11 +4,11 @@ module Obstacles
   , TunnelConfig
   ) where
 
-import MyUtil
-import Math
+import MyUtil ((.), bounded)
+import Math (V, (<->), (<+>), (<*>), randomRM, RngMonad, AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotate_obstacle, annotate_triangle, obst_min_y, obst_obst_collision)
 import MyGL ()
-import System.Random
-import Control.Monad
+import System.Random (RandomGen, Random(..))
+import Control.Monad (replicateM)
 import Graphics.UI.GLUT
 import Prelude hiding ((.))
 import Control.Arrow (first)
