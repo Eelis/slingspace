@@ -14,7 +14,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), annotate_obstacle, annotate_triangle, norm_2, V, AnnotatedTriangle, AnnotatedObstacle(..), ao_triangles, dist_sqrd, square, triangle_collision)
-import Debug.Trace (trace)
 import Data.List (sortBy)
 import MyGL ()
 import MyUtil ((.), minimumByMeasure)
@@ -81,7 +80,7 @@ rope_effect :: GameplayConfig → V → V
 rope_effect c off = off </> (norm_2 off + rope_k c)
 
 tick_player :: GameplayConfig → Player → Player
-tick_player cfg p = trace (show $ pb_pos $ body p) $ if dead p then p else
+tick_player cfg p = if dead p then p else
   p { body = maybe newbody (flip PlayerBody (Vector3 0 0 0)) collision, guns = newguns {-, dead = isJust collision-}, closest_obstacle = new_closest }
   where
    oldpos@(Vector3 oldx oldy oldz) = pb_pos $ body p
