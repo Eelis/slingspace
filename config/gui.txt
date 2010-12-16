@@ -3,7 +3,7 @@ GuiConfig
 , cross_offset_hor = 11
 , cross_offset_ver = 7
 , ugly = False
-, floor_conf = Shadows
+, floor_conf = Just Shadows
 , player_size = 35
 , cam_conf = CameraConfig
   { viewing_dist = 20000
