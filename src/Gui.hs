@@ -17,7 +17,6 @@ import MyGL ()
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, timeofday_usecs)
 import Prelude hiding ((.))
-import GHC.Word (Word64)
 
 data Scheme = Scheme
   { shadow_color :: Color4 GLclampf
@@ -187,69 +186,21 @@ setup_glut_callbacks
   pauseRef ← newIORef True
   cursorPos ← newIORef $ Position 0 0
   cameraRef ← newIORef $ Camera cam_init_dist 0 0
-  tr ← newIORef 0
+  tr ← timeofday_usecs >>= newIORef
 
   GLUT.reshapeCallback $= Just (reshape cam_conf)
   GLUT.displayCallback $= do
     camera ← readIORef cameraRef
     clientState ← readIORef clientStateRef
-    display tr cc guiConfig scheme name camera clientState
+    display cc guiConfig scheme name camera clientState
   GLUT.keyboardMouseCallback $= Just (onInput cc guiConfig clientStateRef pauseRef cameraRef cursorPos)
   GLUT.idleCallback $= Just (do
-  --do_idly_every_n_msecs tick_duration $ do
-    --t ← readIORef tr
-    --tn ← timeofday_usecs
-    --let pluses = (tn - t) `div` 500
-    --when (pluses < 100) $ putStrLn $ take (fromIntegral pluses) $ repeat '+'
-    --writeIORef tr tn
-    GLUT.postRedisplay Nothing
-    u ← timeofday_usecs
-    print u
-    actual_tick pauseRef cc cameraRef scheme guiConfig clientStateRef name gameplayConfig)
-
-
-do_idly_every_n_msecs :: Word64 → IO () → IO ()
-do_idly_every_n_msecs n a = do
-  now ← timeofday_usecs
-  mr ← newIORef (now :: Word64)
-  GLUT.idleCallback $= Just (do
-    u ← timeofday_usecs
-    m ← readIORef mr
-    when (u > m) $ a >> writeIORef mr (m + n * 1000)
-    )
-
-
-do_every_n_msecs_simple :: Integer → IO () → IO ()
-do_every_n_msecs_simple n a = do_every_n_msecs n () (const a)
-
-do_every_n_msecs :: Integer → a → (a → IO a) → IO ()
-do_every_n_msecs n x a = timeofday_usecs >>= w x
-  where
-    w y p = do
-      u ← timeofday_usecs
-      if (u > p)
-        then do
-          x' ← a y
-          w x' (p + fromIntegral n * 1000)
-        else GLUT.addTimerCallback 1 $ w y p
-
---         print (p - u) else putStrLn $ "-" ++ show (u - p)
---       
---       let p' = p + fromIntegral n * 1000; next = w x' p'
---       q ← timeofday_usecs
---       if p' > q then addTimerCallback (fromIntegral $ (p' - q) `quot` 1000) next else next
-
-
--- do_every_n_msecs :: Integer → a → (a → IO a) → IO ()
--- do_every_n_msecs n x a = timeofday_usecs >>= w x
---   where
---     w y p = do
---       u ← timeofday_usecs
---       if (u < p) then print (p - u) else putStrLn $ "-" ++ show (u - p)
---       x' ← a y
---       let p' = p + fromIntegral n * 1000; next = w x' p'
---       q ← timeofday_usecs
---       if p' > q then addTimerCallback (fromIntegral $ (p' - q) `quot` 1000) next else next
+    t ← readIORef tr
+    tn ← timeofday_usecs
+    when (tn >= t) $ do
+      writeIORef tr (t + 10 * 1000) -- Once every 10 ms. Todo: Make configurable etc.
+      actual_tick pauseRef cc cameraRef scheme guiConfig clientStateRef name gameplayConfig
+      GLUT.postRedisplay Nothing)
 
 whenJust :: Monad m ⇒ Maybe a → (a → m ()) → m ()
 whenJust = flip (maybe (return ()))
@@ -320,8 +271,8 @@ draw_floor Scheme{..} CameraConfig{..} visible_obs me kind = case kind of
 
 
 
-display :: GuiCallback c ⇒ IORef GHC.Word.Word64 → c → GuiConfig → Scheme → String → Camera → ClientState → IO ()
-display _ {-tr-} cc guiConfig@GuiConfig{..} scheme@Scheme{..} myname Camera{..} clientState = do
+display :: GuiCallback c ⇒ c → GuiConfig → Scheme → String → Camera → ClientState → IO ()
+display cc guiConfig@GuiConfig{..} scheme@Scheme{..} myname Camera{..} clientState = do
   GLUT.clear [ColorBuffer, DepthBuffer]
   GLUT.loadIdentity
   GLUT.translate $ Vector3 0 0 (- cam_dist)
