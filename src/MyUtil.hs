@@ -1,6 +1,8 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, timeofday_usecs, timeofday_msecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust
   ) where
 
 import Prelude hiding (catch, (.))
@@ -12,10 +14,11 @@ import Network.Socket (Socket, sClose, send, recv)
 import Control.Monad (liftM, forever)
 import Control.Exception (bracket)
 import System.IO (hFlush, stdout)
-import Foreign (Word16, Word64)
+import Foreign (Word16)
 import System (getArgs)
 import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, {-myThreadId,-} forkIO)
 import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
+import System.Posix.Clock (getTime, Clock(Monotonic), TimeSpec(..))
 
 #ifdef linux_HOST_OS
 
@@ -109,20 +112,14 @@ getlineSR sr@(SockReader s br) = do
 
 foreign import ccall unsafe "htons" htons :: Word16 → Word16
 
-#ifdef linux_HOST_OS
+timeSpecAsNanoSecs :: TimeSpec → Integer
+timeSpecAsNanoSecs TimeSpec{..} = toInteger sec * 1000000000 + toInteger nsec
 
-foreign import ccall "cutil.h timeofday_usecs" timeofday_usecs :: IO (Word64)
+getMonotonicNanoSecs :: IO Integer
+getMonotonicNanoSecs = timeSpecAsNanoSecs . getTime Monotonic
 
-#else
-
-timeofday_usecs = do
-  FILETIME t ← getSystemTimeAsFileTime
-  return $ t `quot` 10
-
-#endif
-
-timeofday_msecs :: IO Word64
-timeofday_msecs = (`div` 1000) . timeofday_usecs
+getMonotonicMilliSecs :: IO Integer
+getMonotonicMilliSecs = (`div` 1000000) . getMonotonicNanoSecs
 
 minimumByMeasure :: Ord b ⇒ (a → b) → [a] → a
 minimumByMeasure f l = snd $ minimumBy (\x y → compare (fst x) (fst y)) $ map (\x → (f x, x)) l

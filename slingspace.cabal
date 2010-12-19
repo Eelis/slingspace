@@ -6,7 +6,7 @@ maintainer: slingspace AT contacts DOT eelis ANOTHERDOT net
 stability: experimental
 build-type: Simple
 synopsis: A 3D Spiderman-like slinging game.
-build-depends: base, haskell98, GLUT, OpenGL>=2.0, stm, network, unix, template-haskell, random, containers, mtl
+build-depends: base, haskell98, GLUT, OpenGL>=2.0, stm, network, unix, template-haskell, random, containers, mtl, clock
 tested-with: GHC==6.6.20070306
 data-files:
   doc/manual.xhtml
@@ -23,18 +23,15 @@ category: games
 executable: slingspace
 main-is: local-infinite.hs
 hs-source-dirs: src
-c-sources: src/cutil.c
 ghc-options: -fglasgow-exts -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
 extensions: TemplateHaskell CPP ForeignFunctionInterface
 
 -- executable: slingspace-client
 -- main-is: client.hs
 -- hs-source-dirs: src
--- c-sources: src/cutil.c
 -- ghc-options: -fglasgow-exts -fth -cpp -ffi -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds
 
 -- executable: slingspace-server
 -- main-is: server.hs
 -- hs-source-dirs: src
--- c-sources: src/cutil.c
 -- ghc-options: -fglasgow-exts -fth -cpp -ffi -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -threaded

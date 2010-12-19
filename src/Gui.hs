@@ -15,9 +15,8 @@ import Control.Monad.Fix (fix)
 import Logic (Player(..), PlayerBody(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around)
 import MyGL ()
 import System.Exit (exitWith, ExitCode(ExitSuccess))
-import MyUtil ((.), getDataFileName, read_config_file, timeofday_msecs, tupleToList, whenJust)
+import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
 import Prelude hiding ((.))
-import GHC.Word (Word64)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 
 -- Configuration:
@@ -73,8 +72,8 @@ gunGuiConfig :: GuiConfig → Gun → GunGuiConfig
 gunGuiConfig cf LeftGun = GunGuiConfig (- cross_offset_ver cf) (- cross_offset_hor cf)
 gunGuiConfig cf RightGun = GunGuiConfig (- cross_offset_ver cf) (cross_offset_hor cf)
 
-tickDurationMsecs :: Word64
-tickDurationMsecs = 10  -- Todo: Make configurable.
+tickDurationMilliSecs :: Integer
+tickDurationMilliSecs = 10  -- Todo: Make configurable.
 
 -- State:
 
@@ -181,12 +180,12 @@ setupCallbacks cc clientStateRef name gameplayConfig = do
     runReaderT (onDisplay cc name camera clientState) context
   GLUT.keyboardMouseCallback $= Just (onInput cc guiConfig clientStateRef pauseRef cameraRef cursorPos)
 
-  (timeofday_msecs >>=) $ fix $ \self next → do
+  (getMonotonicMilliSecs >>=) $ fix $ \self next → do
     tick pauseRef cc cameraRef guiConfig clientStateRef name gameplayConfig
-    tn ← timeofday_msecs
-    let next' = next + tickDurationMsecs
+    tn ← getMonotonicMilliSecs
+    let next' = next + tickDurationMilliSecs
     if tn >= next then self next' else do
-    GLUT.addTimerCallback (fromIntegral $ next - tn) (self next')
+    GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
 
 -- Drawers:
 
