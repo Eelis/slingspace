@@ -7,12 +7,12 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4, GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..))
 import Maybe (isJust)
 import Control.Monad (when, unless, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(..), PlayerBody(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around)
+import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around, toFloor)
 import MyGL ()
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
@@ -109,7 +109,7 @@ onDisplay cc myname Camera{..} clientState = do
     GLUT.rotate cam_yrot $ Vector3 0 1 0
   players ← lift $ cc_players cc
   whenJust (Map.lookup myname players) $ \me → do
-  lift $ GLUT.translate $ (pb_pos $ body me) <*> (-1)
+  lift $ GLUT.translate $ (ray_origin $ body me) <*> (-1)
   drawPlayers players
   let visible_obs = aos_to_ats $ take 400 $ obstacles_around me
   drawObstacles visible_obs
@@ -206,7 +206,7 @@ drawFloor visible_obs Player{..} = do
     Grid{..} → do
       GLUT.color grid_color
       let
-        Vector3 x _ z = pb_pos body
+        Vector3 x _ z = ray_origin body
         funky h = fromInteger (h' - (h' `mod` grid_size)) :: GLdouble where h' = round h :: Integer
         aligned_z = funky z; aligned_x = funky x
         vd = viewing_dist
@@ -253,8 +253,8 @@ drawRopes players = do
   renderPrimitive Lines $ forM players $ \Player{..} →
     forM_ (Map.toList guns) $ \(gun, Rope{..}) → do
         GLUT.color $ gunColor scheme gun
-        vertex $ tov $ pb_pos body <+> (normalize_v (rope_pos <-> pb_pos body) <*> (playerSize + 0.05))
-        vertex $ tov rope_pos
+        vertex $ tov $ ray_origin body <+> (normalize_v (ray_origin rope_ray <-> ray_origin body) <*> (playerSize + 0.05))
+        vertex $ tov $ ray_origin rope_ray
   return ()
 
 drawObstacles :: [AnnotatedTriangle] → Gui ()
@@ -275,7 +275,7 @@ drawPlayers players = do
   GLUT.materialAmbient Front $= ball_material_ambient
   GLUT.materialDiffuse Front $= ball_material_diffuse
   forM players $ \Player{..} → GLUT.preservingMatrix $ do
-    GLUT.translate $ pb_pos body
+    GLUT.translate $ ray_origin body
     GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
   return ()
 
@@ -356,7 +356,7 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   Camera{..} ← readIORef cameraRef
 
-  let cam_pos = pb_pos body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` (cam_xrot / 180 * pi) `y_rot_vector` (cam_yrot / 180 * pi))
+  let cam_pos = ray_origin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` (cam_xrot / 180 * pi) `y_rot_vector` (cam_yrot / 180 * pi))
 
   clientState ← readIORef clientStateRef
 
@@ -377,6 +377,3 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   cc_tick cc
   GLUT.postRedisplay Nothing
-
-toFloor :: Num a ⇒ Vector3 a → Vector3 a
-toFloor (Vector3 x _ z) = Vector3 x 0 z

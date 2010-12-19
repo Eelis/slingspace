@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Math where
 
 import Prelude hiding ((.))
@@ -90,11 +92,13 @@ annotate_triangle a b c =
    kat a' b' c' = c' <-> ((natob <*> inner_prod natob (c' <-> a')) <+> a')
     where natob = normalize_v (b' <-> a')
 
+data Ray = Ray { ray_origin, ray_direction :: !V } deriving (Read, Show)
+
 ray_triangle_intersection ::
-  AnnotatedTriangle → V → V → (GLdouble → V → Bool) → Maybe (GLdouble, V)
-ray_triangle_intersection (AnnotatedTriangle n (a, b, c) (anp, bp, cp) _) ray_orig ray_dir inter_pred = do
-  eta ← ray_plane_intersection n a ray_orig ray_dir
-  let coll = ray_orig <+> (ray_dir <*> eta)
+  AnnotatedTriangle → Ray → (GLdouble → V → Bool) → Maybe (GLdouble, V)
+ray_triangle_intersection (AnnotatedTriangle n (a, b, c) (anp, bp, cp) _) ray@Ray{..} inter_pred = do
+  eta ← ray_plane_intersection n a ray
+  let coll = ray_origin <+> (ray_direction <*> eta)
   if eta < 0 || (not $ inter_pred eta coll) ||
     inner_prod anp (coll <-> a) < 0 ||
     inner_prod bp (coll <-> b) < 0 ||
@@ -102,25 +106,28 @@ ray_triangle_intersection (AnnotatedTriangle n (a, b, c) (anp, bp, cp) _) ray_or
    then Nothing else Just (eta, coll)
 
 triangle_collision :: [AnnotatedTriangle] →
-  V → V → (GLdouble → V → Bool) → Maybe (GLdouble, V, AnnotatedTriangle)
-triangle_collision triangles ray_base ray_dir inter_pred =
+  Ray → (GLdouble → V → Bool) → Maybe (GLdouble, V, AnnotatedTriangle)
+triangle_collision triangles ray inter_pred =
   foldr (\o r →
     maybe r (\(eta, coll) →
       if {-inter_pred eta coll &&-} (maybe True (\(oldeta, _, _) → oldeta > eta) r) then Just (eta, coll, o) else r)
-     (ray_triangle_intersection o ray_base ray_dir inter_pred)
+     (ray_triangle_intersection o ray inter_pred)
   ) Nothing triangles
 
-ray_plane_intersection :: V → V → V → V → Maybe GLdouble
-ray_plane_intersection plane_normal plane_point ray_orig ray_dir =
-  let u = inner_prod plane_normal ray_dir in
-  if u < 0 then Just $ -(inner_prod plane_normal (ray_orig <-> plane_point)) / u
+ray_plane_intersection :: V → V → Ray → Maybe GLdouble
+ray_plane_intersection plane_normal plane_point Ray{..} =
+  let u = inner_prod plane_normal ray_direction in
+  if u < 0 then Just $ -(inner_prod plane_normal (ray_origin <-> plane_point)) / u
   else Nothing
+
+rayThrough :: V → V → Ray
+rayThrough from to = Ray from (to <-> from)
 
 triangles_collide :: AnnotatedTriangle → AnnotatedTriangle → Bool
 triangles_collide t@(AnnotatedTriangle _ (a, b, c) _ _) t'@(AnnotatedTriangle _ (a', b', c') _ _) =
   or $ isJust .
-    [rti t' a (b <-> a) p, rti t' b (c <-> b) p, rti t' c (a <-> c) p,
-    rti t a' (b' <-> a') p, rti t b' (c' <-> b') p, rti t c' (a' <-> c') p]
+    [rti t' (rayThrough a b) p, rti t' (rayThrough b c) p, rti t' (rayThrough c a) p,
+    rti t (rayThrough a' b') p, rti t (rayThrough b' c') p, rti t (rayThrough c' a') p]
   where rti = ray_triangle_intersection; p = const . (< 1)
 
 data AnnotatedObstacle = AnnotatedObstacle

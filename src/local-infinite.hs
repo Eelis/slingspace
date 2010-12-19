@@ -1,8 +1,8 @@
 import Gui (gui, GuiCallback(..))
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
-import Logic (Player(..), PlayerBody(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
+import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
-import Math ((<->), AnnotatedObstacle(..), readRngMonad, norm_2)
+import Math ((<->), AnnotatedObstacle(..), readRngMonad, norm_2, Ray(..))
 import MyGL ()
 import System.Random (getStdGen)
 import MyUtil ((.), omni_map, read_config_file)
@@ -17,7 +17,7 @@ name = "Player"
 data LocalGuiCallback = LCC (IORef Player) GameplayConfig
 
 dist_to_closest :: Player → GLdouble
-dist_to_closest p = norm_2 (v <-> pb_pos (body p))
+dist_to_closest p = norm_2 (v <-> ray_origin (body p))
   where (GraphNode (AnnotatedObstacle v _) _) = closest_obstacle p
 
 instance GuiCallback LocalGuiCallback where
@@ -79,5 +79,5 @@ main = do
   tunnel ← to_graphnodes . ($(project 2) .) . fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
   --print $ length $ take 100000 bla
   let closest = head tunnel
-  p ← newIORef $ Player (PlayerBody (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
+  p ← newIORef $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
   gui (LCC p gp_cfg) name gp_cfg
