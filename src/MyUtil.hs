@@ -1,6 +1,6 @@
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, timeofday_usecs, repeat_every, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource'
+  , doing, timeofday_usecs, timeofday_msecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust
   ) where
 
 import Prelude hiding (catch, (.))
@@ -9,7 +9,7 @@ import MyGL ()
 import Data.List (minimumBy)
 import Graphics.UI.GLUT ()
 import Network.Socket (Socket, sClose, send, recv)
-import Control.Monad (liftM, when, forever)
+import Control.Monad (liftM, forever)
 import Control.Exception (bracket)
 import System.IO (hFlush, stdout)
 import Foreign (Word16, Word64)
@@ -19,7 +19,6 @@ import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
 
 #ifdef linux_HOST_OS
 
-import System.Posix.Unistd(usleep)
 import qualified Paths_slingspace
 
 getDataFileName :: FilePath → IO String
@@ -114,18 +113,6 @@ foreign import ccall unsafe "htons" htons :: Word16 → Word16
 
 foreign import ccall "cutil.h timeofday_usecs" timeofday_usecs :: IO (Word64)
 
-repeat_every :: Word64 → IO () → IO ()
-repeat_every usecs a = do
-  timeofday_usecs >>= f
-  where
-   f l = do
-    a
-    n ← timeofday_usecs
-    when (l + usecs > n) $ do
-      let s = (l + usecs - n)
-      usleep (fromInteger $ toInteger $ s)
-    f (l + usecs)
-
 #else
 
 timeofday_usecs = do
@@ -134,9 +121,19 @@ timeofday_usecs = do
 
 #endif
 
+timeofday_msecs :: IO Word64
+timeofday_msecs = (`div` 1000) . timeofday_usecs
+
 minimumByMeasure :: Ord b ⇒ (a → b) → [a] → a
 minimumByMeasure f l = snd $ minimumBy (\x y → compare (fst x) (fst y)) $ map (\x → (f x, x)) l
 
 omni_map :: (a → [b] → b) → [a] → [b]
 omni_map _ [] = []
 omni_map f (h:t) = f h t' : t' where t' = omni_map f t
+
+class TupleToList t a | t → a where tupleToList :: t → [a]
+instance TupleToList (a, a) a where tupleToList (x, y) = [x, y]
+instance TupleToList (a, a, a) a where tupleToList (x, y, z) = [x, y, z]
+
+whenJust :: Monad m ⇒ Maybe a → (a → m ()) → m ()
+whenJust = flip (maybe (return ()))

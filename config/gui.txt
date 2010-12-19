@@ -1,11 +1,11 @@
 GuiConfig
-{ window_title = "SlingSpace"
+{ windowTitle = "SlingSpace"
 , cross_offset_hor = 11
 , cross_offset_ver = 7
 , ugly = False
-, floor_conf = Just Shadows
-, player_size = 35
-, cam_conf = CameraConfig
+, floorConf = Just Shadows
+, playerSize = 35
+, camConf = CameraConfig
   { viewing_dist = 20000
   , fov = 45
   , cam_init_dist = 600
