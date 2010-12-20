@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns #-}
 
 module Gui (GuiCallback(..), gui) where
 
@@ -7,12 +7,12 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4, GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..))
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles)
 import Maybe (isJust)
 import Control.Monad (when, unless, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around, toFloor)
+import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, obstacles_around, toFloor)
 import MyGL (rotateRadians)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
@@ -109,15 +109,15 @@ onDisplay cc myname Camera{..} clientState = do
     rotateRadians cam_yrot $ Vector3 0 1 0
   players ← lift $ cc_players cc
   whenJust (Map.lookup myname players) $ \me → do
-  lift $ GLUT.translate $ (ray_origin $ body me) <*> (-1)
+  lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers players
-  let visible_obs = aos_to_ats $ take 400 $ obstacles_around me
+  let visible_obs = take 400 (obstacles_around me) >>= obstacleTriangles
   drawObstacles visible_obs
   lift $ lighting $= Disabled
   drawFloor visible_obs me
   drawRopes players
   drawCrossHairs clientState
-  lift $ swapBuffers
+  lift swapBuffers
 
 onReshape :: CameraConfig → GLUT.Size → IO ()
 onReshape CameraConfig{..} s@(GLUT.Size w h) = do
@@ -202,11 +202,11 @@ drawFloor visible_obs Player{..} = do
     Shadows → do
       GLUT.color shadow_color
       GLUT.renderPrimitive Triangles $ forM_ visible_obs $
-        mapM (vertex . tov . toFloor) . tupleToList . obs_vertices
+        mapM (vertex . tov . toFloor) . tupleToList . triangleVertices
     Grid{..} → do
       GLUT.color grid_color
       let
-        Vector3 x _ z = ray_origin body
+        Vector3 x _ z = rayOrigin body
         funky h = fromInteger (h' - (h' `mod` grid_size)) :: GLdouble where h' = round h :: Integer
         aligned_z = funky z; aligned_x = funky x
         vd = viewing_dist
@@ -253,8 +253,8 @@ drawRopes players = do
   renderPrimitive Lines $ forM players $ \Player{..} →
     forM_ (Map.toList guns) $ \(gun, Rope{..}) → do
         GLUT.color $ gunColor scheme gun
-        vertex $ tov $ ray_origin body <+> (normalize_v (ray_origin rope_ray <-> ray_origin body) <*> (playerSize + 0.05))
-        vertex $ tov $ ray_origin rope_ray
+        vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
+        vertex $ tov $ rayOrigin rope_ray
   return ()
 
 drawObstacles :: [AnnotatedTriangle] → Gui ()
@@ -264,8 +264,8 @@ drawObstacles visible_obs = do
   GLUT.materialAmbient Front $= obstacle_material_ambient
   GLUT.materialDiffuse Front $= obstacle_material_diffuse
   GLUT.renderPrimitive Triangles $ forM_ visible_obs $ \AnnotatedTriangle{..} → do
-    GLUT.normal $ vectorToNormal obs_normal
-    mapM (vertex . tov) $ tupleToList obs_vertices
+    GLUT.normal $ vectorToNormal triangleNormal
+    mapM (vertex . tov) $ tupleToList triangleVertices
 
 drawPlayers :: Map String Player → Gui ()
 drawPlayers players = do
@@ -275,7 +275,7 @@ drawPlayers players = do
   GLUT.materialAmbient Front $= ball_material_ambient
   GLUT.materialDiffuse Front $= ball_material_diffuse
   forM players $ \Player{..} → GLUT.preservingMatrix $ do
-    GLUT.translate $ ray_origin body
+    GLUT.translate $ rayOrigin body
     GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
   return ()
 
@@ -356,15 +356,15 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   Camera{..} ← readIORef cameraRef
 
-  let cam_pos = ray_origin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)
+  let cam_pos = rayOrigin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)
 
   clientState ← readIORef clientStateRef
 
-  writeIORef clientStateRef $ flip Map.mapWithKey clientState $ \k → (\t g → g { target = t }) $
-    let GunGuiConfig{..} = gunGuiConfig guiConfig k
-    in find_target player gameplayConfig cam_pos $ (Vector3 0 0 (-1)
+  writeIORef clientStateRef $ flip Map.mapWithKey clientState $
+    \(gunGuiConfig guiConfig → GunGuiConfig{..}) g → g { target =
+     find_target player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
       `x_rot_vector` (gun_xrot + cam_xrot)
-      `y_rot_vector` (gun_yrot + cam_yrot))
+      `y_rot_vector` (gun_yrot + cam_yrot) }
 
   forM_ (Map.toList clientState) $ \(k, v) →
     case v of

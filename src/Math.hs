@@ -1,14 +1,16 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns #-}
 
 module Math where
 
 import Prelude hiding ((.))
 import MyGL ()
-import Graphics.Rendering.OpenGL.GL
+import Graphics.Rendering.OpenGL.GL hiding (Plane)
 import System.Random (RandomGen(..), Random(..))
 import Monad
-import MyUtil ((.))
-import Data.Maybe (isJust)
+import MyUtil ((.), tupleToList)
+import Data.Function (on)
+import Data.List (minimumBy)
+import Data.Maybe (isJust, mapMaybe)
 
 -- RANDOM STUFF
 
@@ -73,16 +75,16 @@ inner_prod (Vector3 x y z) (Vector3 x' y' z') = x*x' + y*y' + z*z'
 {-# INLINE inner_prod #-}
 
 data AnnotatedTriangle = AnnotatedTriangle
-  { obs_normal :: !V
-  , obs_vertices :: !(V, V, V)
+  { triangleNormal :: !V
+  , triangleVertices :: !(V, V, V)
     -- TODO: can't we make the V's inside the tuple strict? are tuples strict?
   , obs_projs :: !(V, V, V) -- allow for fast calculation of ray intersections
-  , at_center :: !V
+  , triangleCenter :: !V
   } -- should only ever be constructed using annotate_triangle
   deriving (Show, Read, Eq)
 
-annotate_triangle :: V → V → V → AnnotatedTriangle
-annotate_triangle a b c =
+annotateTriangle :: V → V → V → AnnotatedTriangle
+annotateTriangle a b c =
   AnnotatedTriangle
     (normalize_v (cross_prod (b <-> a) (c <-> a)))
     (a, b, c)
@@ -92,63 +94,79 @@ annotate_triangle a b c =
    kat a' b' c' = c' <-> ((natob <*> inner_prod natob (c' <-> a')) <+> a')
     where natob = normalize_v (b' <-> a')
 
-data Ray = Ray { ray_origin, ray_direction :: !V } deriving (Read, Show)
+data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
+data Plane = Plane { planeNormal, planePoint :: !V }
 
-ray_triangle_intersection ::
-  AnnotatedTriangle → Ray → (GLdouble → V → Bool) → Maybe (GLdouble, V)
-ray_triangle_intersection (AnnotatedTriangle n (a, b, c) (anp, bp, cp) _) ray@Ray{..} inter_pred = do
-  eta ← ray_plane_intersection n a ray
-  let coll = ray_origin <+> (ray_direction <*> eta)
-  if eta < 0 || (not $ inter_pred eta coll) ||
-    inner_prod anp (coll <-> a) < 0 ||
-    inner_prod bp (coll <-> b) < 0 ||
-    inner_prod cp (coll <-> c) < 0
-   then Nothing else Just (eta, coll)
+plane :: AnnotatedTriangle → Plane
+plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
-triangle_collision :: [AnnotatedTriangle] →
-  Ray → (GLdouble → V → Bool) → Maybe (GLdouble, V, AnnotatedTriangle)
-triangle_collision triangles ray inter_pred =
-  foldr (\o r →
-    maybe r (\(eta, coll) →
-      if {-inter_pred eta coll &&-} (maybe True (\(oldeta, _, _) → oldeta > eta) r) then Just (eta, coll, o) else r)
-     (ray_triangle_intersection o ray inter_pred)
-  ) Nothing triangles
+class Collision a b c | a b → c where collision :: a → b → c
 
-ray_plane_intersection :: V → V → Ray → Maybe GLdouble
-ray_plane_intersection plane_normal plane_point Ray{..} =
-  let u = inner_prod plane_normal ray_direction in
-  if u < 0 then Just $ -(inner_prod plane_normal (ray_origin <-> plane_point)) / u
-  else Nothing
+sameDirection :: V → V → Bool
+sameDirection a b = inner_prod a b >= 0
+
+instance Collision (Ray, GLdouble → V → Bool) AnnotatedTriangle (Maybe (GLdouble, V)) where
+  collision (ray@Ray{..}, inter_pred) t@(AnnotatedTriangle _ (a, b, c) (anp, bp, cp) _) = do
+    eta ← ray `collision` plane t
+    let coll = rayOrigin <+> (rayDirection <*> eta)
+    guard $ eta >= 0 && inter_pred eta coll &&
+      sameDirection anp (coll <-> a) &&
+      sameDirection bp (coll <-> b) &&
+      sameDirection cp (coll <-> c)
+    return (eta, coll)
+      -- The predicate is integrated because applying it after-the-fact is more expensive, because by that time the three inner_prods have already been evaluated.
+
+instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GLdouble, V, AnnotatedTriangle)) where
+  collision ray triangles
+      | null collisions = Nothing
+      | otherwise = Just $ minimumBy (compare `on` (\(_,x,_) → x)) collisions
+    where
+      collisions :: [(GLdouble, V, AnnotatedTriangle)]
+      collisions = (\(x,(y,z)) → (y,z,x)) . mapMaybe (\triangle → (,) triangle . (ray `collision` triangle)) triangles
+
+instance Collision Ray Plane (Maybe GLdouble) where
+  collision Ray{..} Plane{..}
+    | u < 0 = Just $ inner_prod planeNormal (planePoint <-> rayOrigin) / u
+    | otherwise = Nothing
+   where u = inner_prod planeNormal rayDirection
 
 rayThrough :: V → V → Ray
 rayThrough from to = Ray from (to <-> from)
 
-triangles_collide :: AnnotatedTriangle → AnnotatedTriangle → Bool
-triangles_collide t@(AnnotatedTriangle _ (a, b, c) _ _) t'@(AnnotatedTriangle _ (a', b', c') _ _) =
-  or $ isJust .
-    [rti t' (rayThrough a b) p, rti t' (rayThrough b c) p, rti t' (rayThrough c a) p,
-    rti t (rayThrough a' b') p, rti t (rayThrough b' c') p, rti t (rayThrough c' a') p]
-  where rti = ray_triangle_intersection; p = const . (< 1)
+lineLoop :: [a] → [(a, a)]
+lineLoop [] = []
+lineLoop (x:xs) = go x xs
+  where
+    go l [] = [(l, x)]
+    go l (y:ys) = (l, y) : go y ys
+
+instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
+  collision t t' = or $
+      h t' . lineLoop (tupleToList $ triangleVertices t) ++ h t . lineLoop (tupleToList $ triangleVertices t')
+    where
+      h :: AnnotatedTriangle → (V, V) → Bool
+      h u (x, y) = isJust $  (rayThrough x y, \(z::GLdouble) (_::V) → z < 1) `collision` u
 
 data AnnotatedObstacle = AnnotatedObstacle
-  { ao_center :: !V
-  , ao_triangles :: [AnnotatedTriangle]
+  { obstacleCenter :: !V
+  , obstacleTriangles :: [AnnotatedTriangle]
   } deriving (Show, Read)
 
-annotate_obstacle :: [AnnotatedTriangle] → AnnotatedObstacle
-annotate_obstacle a = AnnotatedObstacle (foldr1 (<+>) (at_center . a) </> realToFrac (length a)) a
+annotateObstacle :: [AnnotatedTriangle] → AnnotatedObstacle
+annotateObstacle triangles =
+  AnnotatedObstacle (foldr1 (<+>) (triangleCenter . triangles) </> realToFrac (length triangles)) triangles
 
-behind :: V → AnnotatedTriangle → Bool
-behind v (AnnotatedTriangle n (a, _, _) _ _) = inner_prod (v <-> a) n < 0
+behind :: V → Plane → Bool
+behind v Plane{..} = sameDirection (planePoint <-> v) planeNormal
 
 point_in_obstacle :: AnnotatedObstacle → V → Bool
-tri_in_obstacle :: AnnotatedObstacle → AnnotatedTriangle → Bool
-obst_obst_collision :: AnnotatedObstacle → AnnotatedObstacle → Bool
+point_in_obstacle o v = and $ behind v . plane . obstacleTriangles o
 
-point_in_obstacle (AnnotatedObstacle _ a) v = and $ behind v . a
-tri_in_obstacle o (AnnotatedTriangle _ (a, b, c) _ _) = or $ point_in_obstacle o . [a, b, c]
-obst_obst_collision (AnnotatedObstacle _ a) (AnnotatedObstacle _ b) =
-  or [triangles_collide x y | x ← a, y ← b]
+tri_in_obstacle :: AnnotatedObstacle → AnnotatedTriangle → Bool
+tri_in_obstacle o = or . (point_in_obstacle o .) .  tupleToList . triangleVertices
+
+instance Collision AnnotatedObstacle AnnotatedObstacle Bool where
+  collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
 
 at_max_z :: AnnotatedTriangle → GLdouble
 at_max_z (AnnotatedTriangle _ (Vector3 _ _ z0, Vector3 _ _ z1, Vector3 _ _ z2) _ _) =
@@ -159,7 +177,7 @@ at_min_y (AnnotatedTriangle _ (Vector3 _ y0 _, Vector3 _ y1 _, Vector3 _ y2 _) _
   y0 `min` y1 `min` y2
 
 obst_min_y :: AnnotatedObstacle → GLdouble
-obst_min_y (AnnotatedObstacle _ a) = minimum $ at_min_y . a
+obst_min_y = minimum . (at_min_y .) . obstacleTriangles
 
 data Num a ⇒ MMatrix a = MMatrix a a a a a a a a a deriving Show
 
@@ -206,3 +224,6 @@ wrap n lower upper = if n < lower then upper else if n > upper then lower else n
 
 dist_sqrd :: Floating a ⇒ Vector3 a → Vector3 a → a
 dist_sqrd v w = let d = v <-> w in inner_prod d d
+
+modIntegralPart :: RealFrac r ⇒ r → Integer → r
+modIntegralPart (properFraction → (i, f)) n = fromInteger (i `mod` n) + f

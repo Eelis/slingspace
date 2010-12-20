@@ -5,7 +5,7 @@ module Obstacles
   ) where
 
 import MyUtil ((.), bounded)
-import Math (V, (<->), (<+>), (<*>), randomRM, RngMonad, AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotate_obstacle, annotate_triangle, obst_min_y, obst_obst_collision)
+import Math (V, (<->), (<+>), (<*>), randomRM, RngMonad, AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
 import MyGL ()
 import System.Random (RandomGen, Random(..))
 import Control.Monad (replicateM)
@@ -31,8 +31,8 @@ randomObs center size = do
   let q = (center <+>) . randomVector3 size
   x ← q; y ← q; z ← q
   let w = x <-> (normalize_v (cross_prod (y <-> x) (z <-> x)) <*> size)
-  return $ annotate_obstacle $ [at x y z, at y x w, at x z w, at z y w]
-  where at = annotate_triangle
+  return $ annotateObstacle $ [at x y z, at y x w, at x z w, at z y w]
+  where at = annotateTriangle
 
 data TunnelConfig = TunnelConfig
   { allow_intersecting_obstacles :: Bool -- can improve performance, but causes artifacts
@@ -44,7 +44,7 @@ tunnel :: RandomGen g ⇒ TunnelConfig → [AnnotatedObstacle] → V → GLdoubl
 tunnel cf prev dir@(Vector3 dx dy dz) width obssize from = do
   coff ← randomRM (Vector3 (-width) (-width) 0, Vector3 width width 0)
   newobst ← randomObs (from <+> coff) obssize
-  if (not (allow_intersecting_obstacles cf) && any (obst_obst_collision newobst) prev) || obst_min_y newobst < 0
+  if (not (allow_intersecting_obstacles cf) && any (collision newobst) prev) || obst_min_y newobst < 0
    then tunnel cf prev dir width obssize from
    else do
     xChange ← randomRM (-20, 20)
@@ -107,7 +107,7 @@ infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Ve
     tu prev ang width from = do
       coff ← randomRM (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
       newobst ← randomObs (from <+> coff) (obstacle_size cf)
-      if (not (allow_intersecting_obstacles cf) && any (obst_obst_collision newobst) prev) {-|| obst_min_y newobst < 0-}
+      if (not (allow_intersecting_obstacles cf) && any (collision newobst) prev) {-|| obst_min_y newobst < 0-}
        then {-trace "<miss>" $-} tu prev ang width from
        else do
         let d = Vector3 (sin ang) 0 (cos ang)

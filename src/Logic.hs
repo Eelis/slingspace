@@ -8,7 +8,7 @@ module Logic
   , Greeting(..)
   , ClientToServerMsg(..), ServerToClientMsg(..)
   , GraphNode(..), SerializablePlayer(..)
-  , to_graphnode_map, update_player, serialize_player, obstacles_around, aos_to_ats
+  , to_graphnode_map, update_player, serialize_player, obstacles_around
   , from_network_obs, NetworkObstacle(..)
   , toFloor
   ) where
@@ -16,7 +16,7 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), annotate_obstacle, annotate_triangle, norm_2, V, AnnotatedTriangle, AnnotatedObstacle(..), ao_triangles, dist_sqrd, square, triangle_collision, Ray(..))
+import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, AnnotatedObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
 import Data.List (sortBy)
 import MyGL ()
 import MyUtil ((.), minimumByMeasure)
@@ -30,7 +30,7 @@ data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
 data Greeting = Welcome GameplayConfig [NetworkObstacle] | PissOff String deriving (Show, Read)
 
 from_network_obs :: [NetworkObstacle] → [AnnotatedObstacle]
-from_network_obs = map (\(NO l) → annotate_obstacle $ (\(x, y, z) → annotate_triangle x y z) . l)
+from_network_obs = map (\(NO l) → annotateObstacle $ (\(x, y, z) → annotateTriangle x y z) . l)
 
 data ClientToServerMsg = FireAt Gun V | Release Gun | Spawn deriving (Read, Show)
 data ServerToClientMsg =
@@ -66,7 +66,7 @@ serialize_player (Player x y z _) = SerializablePlayer x y z
 fire :: GameplayConfig → Gun → V → Player → Player
 fire c g t p = p { guns = Map.insert g (Rope (Ray pos dir) eta) (guns p) }
   where
-   pos = ray_origin $ body p
+   pos = rayOrigin $ body p
    off = t <-> pos
    eta = round $ norm_2 off / shooting_speed c
    dir = off </> fromInteger eta
@@ -74,38 +74,34 @@ fire c g t p = p { guns = Map.insert g (Rope (Ray pos dir) eta) (guns p) }
 release :: Gun → Player → Player
 release g p = p { guns = Map.delete g $ guns p }
 
-aos_to_ats :: [AnnotatedObstacle] → [AnnotatedTriangle]
-aos_to_ats = concat . (ao_triangles .)
-
 rope_effect :: GameplayConfig → V → V
 rope_effect c off = off </> (norm_2 off + rope_k c)
 
 progressRay :: Ray → Ray
-progressRay r@Ray{..} = r { ray_origin = ray_origin <+> ray_direction }
+progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
 tick_player :: GameplayConfig → Player → Player
 tick_player cfg p = if dead p then p else
-  p { body = maybe newbody (flip Ray (Vector3 0 0 0)) collision, guns = newguns {-, dead = isJust collision-}, closest_obstacle = new_closest }
+  p { body = maybe newbody (flip Ray (Vector3 0 0 0)) co, guns = newguns {-, dead = isJust collision-}, closest_obstacle = new_closest }
   where
-   oldpos@(Vector3 oldx oldy oldz) = ray_origin $ body p
-   oldmov = ray_direction $ body p
+   oldpos@(Vector3 oldx oldy oldz) = rayOrigin $ body p
+   oldmov = rayDirection $ body p
    newguns = (. guns p) $ \r → case r of Rope ray (n + 1) → Rope (progressRay ray) n; _ → r
    newbody = Ray
     (oldpos <+> oldmov)
     ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> oldpos); _ → m) oldmov $ guns p)) <*> friction cfg)
-   new_closest = minimumByMeasure (dist_sqrd oldpos . ao_center . gn_obst) (take 40 $ neighbourhood $ closest_obstacle p)
-   collision = if oldy < 0 then Just (toFloor oldpos) else $(project 1) .
-    triangle_collision (aos_to_ats $ take 10 $ obstacles_around p) (Ray oldpos oldmov) (\de _ → de > 0.1 && de < 1.1)
+   new_closest = minimumByMeasure (dist_sqrd oldpos . obstacleCenter . gn_obst) (take 40 $ neighbourhood $ closest_obstacle p)
+   co = if oldy < 0 then Just (toFloor oldpos) else $(project 1) . collision (Ray oldpos oldmov, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (take 10 (obstacles_around p) >>= obstacleTriangles)
 
 move :: V → Player → Player
-move v p@Player{..} = p { body = body { ray_origin = ray_origin body <+> v } }
+move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
 obstacles_around :: Player → [AnnotatedObstacle]
 obstacles_around p = a : gn_obst . n where GraphNode a n = closest_obstacle p
 
-find_target :: Player → GameplayConfig → V → V → Maybe V
-find_target pl lcfg camera_pos gun_dir =
-  $(project 1) . triangle_collision (aos_to_ats $ take 150 $ obstacles_around pl) (Ray camera_pos gun_dir) (const $ (< square (shooting_range lcfg)) . dist_sqrd (ray_origin $ body pl))
+find_target :: Player → GameplayConfig → Ray → Maybe V
+find_target pl lcfg gunRay =
+  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body pl) v < square (shooting_range lcfg)) (take 150 (obstacles_around pl) >>= obstacleTriangles)
 
 data GraphNode = GraphNode
   { gn_obst :: AnnotatedObstacle

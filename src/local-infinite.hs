@@ -17,7 +17,7 @@ name = "Player"
 data LocalGuiCallback = LCC (IORef Player) GameplayConfig
 
 dist_to_closest :: Player → GLdouble
-dist_to_closest p = norm_2 (v <-> ray_origin (body p))
+dist_to_closest p = norm_2 (v <-> rayOrigin (body p))
   where (GraphNode (AnnotatedObstacle v _) _) = closest_obstacle p
 
 instance GuiCallback LocalGuiCallback where
