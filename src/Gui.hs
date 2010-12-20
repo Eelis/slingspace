@@ -13,7 +13,7 @@ import Control.Monad (when, unless, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, aos_to_ats, obstacles_around, toFloor)
-import MyGL ()
+import MyGL (rotateRadians)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
 import Prelude hiding ((.))
@@ -51,7 +51,7 @@ data CameraConfig = CameraConfig
   , fov :: GLdouble -- in degrees
   , cam_init_dist, cam_min_dist, cam_max_dist :: GLdouble
   , cam_zoom_speed :: GLdouble -- in camera distance multiplication per increment
-  , mouse_speed :: GLdouble -- in pixels per degree
+  , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
   } deriving Read
 
@@ -59,7 +59,7 @@ data GunGuiConfig = GunGuiConfig { gun_xrot, gun_yrot :: GLdouble }
 
 data GuiConfig = GuiConfig
   { windowTitle :: String
-  , cross_offset_hor, cross_offset_ver :: GLdouble -- in degrees
+  , cross_offset_hor, cross_offset_ver :: GLdouble -- in radians
   , ugly :: Bool
   , floorConf :: Maybe FloorConfig
   , playerSize :: GLdouble
@@ -105,8 +105,8 @@ onDisplay cc myname Camera{..} clientState = do
     GLUT.translate $ Vector3 0 0 (- cam_dist)
     lighting $= Enabled
     GLUT.position ballLight $= Vertex4 30 30 100 1
-    GLUT.rotate cam_xrot $ Vector3 1 0 0
-    GLUT.rotate cam_yrot $ Vector3 0 1 0
+    rotateRadians cam_xrot $ Vector3 1 0 0
+    rotateRadians cam_yrot $ Vector3 0 1 0
   players ← lift $ cc_players cc
   whenJust (Map.lookup myname players) $ \me → do
   lift $ GLUT.translate $ (ray_origin $ body me) <*> (-1)
@@ -158,7 +158,7 @@ onMotion CameraConfig{..} cameraRef cursorPosRef p@(Position x y) = do
   when (q /= p) $ GLUT.pointerPosition $= q
   when (abs (x - x') + abs (y - y') < 200) $ do
   modifyIORef cameraRef (\c@Camera{..} → c {
-    cam_xrot = cam_xrot + ((if invert_mouse then negate else id) $ fromIntegral (y - y') / (- mouse_speed)),
+    cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral (y' - y) / mouse_speed),
     cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed })
   GLUT.postRedisplay Nothing
 
@@ -235,8 +235,8 @@ drawCrossHairs clientState = do
     let GunGuiConfig{..} = gunGuiConfig guiConfig g
     GLUT.color $ gunColor scheme g
     GLUT.loadIdentity
-    GLUT.rotate gun_xrot $ Vector3 (-1) 0 0
-    GLUT.rotate gun_yrot $ Vector3 0 (-1) 0
+    rotateRadians gun_xrot $ Vector3 (-1) 0 0
+    rotateRadians gun_yrot $ Vector3 0 (-1) 0
     GLUT.renderPrimitive Points $ vertex $ Vertex3 (0 :: GLdouble) 0 (-100)
     when (isJust $ target gu) $ GLUT.renderPrimitive LineLoop $ mapM_ vertex
       [ Vertex3 (-1 :: GLdouble) 0 (-100)
@@ -356,17 +356,15 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   Camera{..} ← readIORef cameraRef
 
-  let cam_pos = ray_origin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` (cam_xrot / 180 * pi) `y_rot_vector` (cam_yrot / 180 * pi))
+  let cam_pos = ray_origin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)
 
   clientState ← readIORef clientStateRef
 
   writeIORef clientStateRef $ flip Map.mapWithKey clientState $ \k → (\t g → g { target = t }) $
     let GunGuiConfig{..} = gunGuiConfig guiConfig k
-    in find_target player gameplayConfig cam_pos $ Vector3 0 0 (-1)
-      `x_rot_vector` (gun_xrot / 180 * pi)
-      `y_rot_vector` (gun_yrot / 180 * pi)
-      `x_rot_vector` (cam_xrot / 180 * pi)
-      `y_rot_vector` (cam_yrot / 180 * pi)
+    in find_target player gameplayConfig cam_pos $ (Vector3 0 0 (-1)
+      `x_rot_vector` (gun_xrot + cam_xrot)
+      `y_rot_vector` (gun_yrot + cam_yrot))
 
   forM_ (Map.toList clientState) $ \(k, v) →
     case v of
