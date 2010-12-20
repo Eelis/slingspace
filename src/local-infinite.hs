@@ -14,17 +14,17 @@ import TupleProjection (project)
 name :: String
 name = "Player"
 
-data LocalGuiCallback = LCC (IORef Player) GameplayConfig
+data LocalGuiCallback = LCC (IORef [Player]) GameplayConfig
 
 dist_to_closest :: Player → GLdouble
 dist_to_closest p = norm_2 (v <-> rayOrigin (body p))
   where (GraphNode (AnnotatedObstacle v _) _) = closest_obstacle p
 
 instance GuiCallback LocalGuiCallback where
-  cc_tick (LCC p c) = modifyIORef p $ tick_player c
+  cc_tick (LCC r _) = modifyIORef r tail
   cc_spawn (LCC _ _) = return ()
-  cc_release (LCC p _) = modifyIORef p . release
-  cc_fire (LCC p c) g v = modifyIORef p $ fire c g v
+  cc_release (LCC p c) g = modifyIORef p $ iterate (tick_player c) . release g . head
+  cc_fire (LCC p c) g v = modifyIORef p $ iterate (tick_player c) . fire c g v . head
   cc_players (LCC p _) = Map.singleton name . readIORef p
 
 interleave :: [a] → [a] → [a]
@@ -79,5 +79,5 @@ main = do
   tunnel ← to_graphnodes . ($(project 2) .) . fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
   --print $ length $ take 100000 bla
   let closest = head tunnel
-  p ← newIORef $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
+  p ← newIORef $ iterate (tick_player gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
   gui (LCC p gp_cfg) name gp_cfg

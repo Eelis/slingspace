@@ -13,7 +13,7 @@ import Control.Monad (when, unless, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, obstacles_around, toFloor)
-import MyGL (rotateRadians)
+import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
 import Prelude hiding ((.))
@@ -84,7 +84,7 @@ type ClientState = Map Gun ClientGunState
 
 class GuiCallback c where
   cc_tick :: c → IO ()
-  cc_players :: c → IO (Map String Player)
+  cc_players :: c → IO (Map String [Player])
   cc_release :: c → Gun → IO ()
   cc_fire :: c → Gun → V → IO ()
   cc_spawn :: c → IO ()
@@ -108,14 +108,15 @@ onDisplay cc myname Camera{..} clientState = do
     rotateRadians cam_xrot $ Vector3 1 0 0
     rotateRadians cam_yrot $ Vector3 0 1 0
   players ← lift $ cc_players cc
-  whenJust (Map.lookup myname players) $ \me → do
+  whenJust (Map.lookup myname players) $ \(me:_) → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
-  drawPlayers players
+  drawPlayers (head . players)
   let visible_obs = take 400 (obstacles_around me) >>= obstacleTriangles
   drawObstacles visible_obs
   lift $ lighting $= Disabled
+  -- lift $ drawFutures players
   drawFloor visible_obs me
-  drawRopes players
+  drawRopes (head . players)
   drawCrossHairs clientState
   lift swapBuffers
 
@@ -279,6 +280,12 @@ drawPlayers players = do
     GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
   return ()
 
+drawFutures :: Map String [Player] → IO ()
+drawFutures players = do
+  GLUT.color green
+  forM players $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov . rayOrigin . body) . take 500
+  return ()
+
 -- Entry point:
 
 gui :: GuiCallback c ⇒ c → String → GameplayConfig → IO ()
@@ -352,7 +359,7 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   maybePlayer ← Map.lookup myname . cc_players cc
 
-  whenJust maybePlayer $ \player@Player{..} → do
+  whenJust maybePlayer $ \(player@Player{..}:_) → do
 
   Camera{..} ← readIORef cameraRef
 
