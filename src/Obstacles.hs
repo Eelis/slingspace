@@ -5,14 +5,13 @@ module Obstacles
   ) where
 
 import MyUtil ((.), bounded)
-import Math (V, (<->), (<+>), (<*>), randomRM, RngMonad, AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
+import Math (V, (<->), (<+>), (<*>), AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
 import MyGL ()
-import System.Random (RandomGen, Random(..))
 import Control.Monad (replicateM)
 import Graphics.UI.GLUT
 import Prelude hiding ((.))
 import Control.Arrow (first)
-
+import Control.Monad.Random (MonadRandom(..), Random(..))
 
 {-
 aboveSurface :: (Ord a, Floating a) ⇒ Vector3 a → Bool
@@ -26,7 +25,7 @@ aboveSurfaceObs :: AnnotatedObstacle → Bool
 aboveSurfaceObs (AnnotatedObstacle a b c d) = and $ map aboveSurfaceTri [a, b, c, d]
 -}
 
-randomObs :: RandomGen g ⇒ V → GLdouble → RngMonad g AnnotatedObstacle
+randomObs :: (Functor m, MonadRandom m) ⇒ V → GLdouble → m AnnotatedObstacle
 randomObs center size = do
   let q = (center <+>) . randomVector3 size
   x ← q; y ← q; z ← q
@@ -40,16 +39,16 @@ data TunnelConfig = TunnelConfig
   , obstacle_size, init_tunnel_width, max_tunnel_width, min_tunnel_width :: GLdouble
   } deriving (Show, Read)
 
-tunnel :: RandomGen g ⇒ TunnelConfig → [AnnotatedObstacle] → V → GLdouble → GLdouble → V → RngMonad g [AnnotatedObstacle]
+tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → [AnnotatedObstacle] → V → GLdouble → GLdouble → V → m [AnnotatedObstacle]
 tunnel cf prev dir@(Vector3 dx dy dz) width obssize from = do
-  coff ← randomRM (Vector3 (-width) (-width) 0, Vector3 width width 0)
+  coff ← getRandomR (Vector3 (-width) (-width) 0, Vector3 width width 0)
   newobst ← randomObs (from <+> coff) obssize
   if (not (allow_intersecting_obstacles cf) && any (collision newobst) prev) || obst_min_y newobst < 0
    then tunnel cf prev dir width obssize from
    else do
-    xChange ← randomRM (-20, 20)
-    yChange ← randomRM (-22, 20)
-    newwidth ← bounded (min_tunnel_width cf) (max_tunnel_width cf) . (width +) . randomRM (-200, 200)
+    xChange ← getRandomR (-20, 20)
+    yChange ← getRandomR (-22, 20)
+    newwidth ← bounded (min_tunnel_width cf) (max_tunnel_width cf) . (width +) . getRandomR (-200, 200)
     let Vector3 nfx nfy nfz = from <+> dir
     let od = obstacle_density cf
     (newobst :) . tunnel cf (newobst : take 10 prev)
@@ -58,16 +57,16 @@ tunnel cf prev dir@(Vector3 dx dy dz) width obssize from = do
         (bounded (dy + yChange) (-od) od)
         dz) newwidth obssize (Vector3 nfx (bounded nfy width 6500) nfz)
 
-niceTunnel :: RandomGen g ⇒ TunnelConfig → RngMonad g [AnnotatedObstacle]
+niceTunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [AnnotatedObstacle]
 niceTunnel cf = take 150 . tunnel cf []
   (Vector3 0 0 (- obstacle_density cf)) -- dir
   (init_tunnel_width cf)
   (obstacle_size cf) -- obstacle size
   (Vector3 0 1000 0) -- from
 
-bigField :: RandomGen g ⇒ RngMonad g [AnnotatedObstacle]
+bigField :: (Functor m, MonadRandom m) ⇒ m [AnnotatedObstacle]
 bigField = replicateM 1600 $ do
-  c ← randomRM (Vector3 0 500 0, Vector3 56000 2000 56000)
+  c ← getRandomR (Vector3 0 500 0, Vector3 56000 2000 56000)
   randomObs c 800
 
 {-
@@ -100,18 +99,18 @@ instance Random GLdouble where
   randomR (lo, hi) = first glDouble . randomR (unGLdouble lo, unGLdouble hi)
   random = first glDouble . random
 
-infinite_tunnel :: RandomGen g ⇒ TunnelConfig → RngMonad g [(V, V, AnnotatedObstacle)]
+infinite_tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [(V, V, AnnotatedObstacle)]
 infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Vector3 0 0 0) {- from -}
   where
-    tu :: RandomGen g ⇒ [AnnotatedObstacle] → GLdouble → GLdouble → V → RngMonad g [(V, V, AnnotatedObstacle)]
+    tu :: (Functor m, MonadRandom m) ⇒ [AnnotatedObstacle] → GLdouble → GLdouble → V → m [(V, V, AnnotatedObstacle)]
     tu prev ang width from = do
-      coff ← randomRM (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
+      coff ← getRandomR (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
       newobst ← randomObs (from <+> coff) (obstacle_size cf)
       if (not (allow_intersecting_obstacles cf) && any (collision newobst) prev) {-|| obst_min_y newobst < 0-}
        then {-trace "<miss>" $-} tu prev ang width from
        else do
         let d = Vector3 (sin ang) 0 (cos ang)
-        widthChange ← randomRM (-200, 200)
+        widthChange ← getRandomR (-200, 200)
         let angChange = 0
         --angChange ← randomRM (-0.2, 0.2)
         {-trace "<generating>" $-}

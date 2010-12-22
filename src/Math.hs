@@ -5,37 +5,22 @@ module Math where
 import Prelude hiding ((.))
 import MyGL ()
 import Graphics.Rendering.OpenGL.GL hiding (Plane)
-import System.Random (RandomGen(..), Random(..))
 import Monad
 import MyUtil ((.), tupleToList)
 import Data.Function (on)
 import Data.List (minimumBy)
 import Data.Maybe (isJust, mapMaybe)
+import Control.Monad.Random (Random(..), MonadRandom(..), runRand)
 
 -- RANDOM STUFF
 
-newtype RngMonad g d = RngMonad { readRngMonad :: g → (d, g) }
-
-instance (RandomGen g) ⇒ Monad (RngMonad g) where
-  (RngMonad f) >>= f' = RngMonad $ \g → let (v, g') = f g in readRngMonad (f' v) g'
-  return x = RngMonad $ (,) x
-
-instance (RandomGen g) ⇒ Functor (RngMonad g) where
-  fmap f x = x >>= return . f
-
-randomM :: (RandomGen g, Random a) ⇒ RngMonad g a
-randomM = RngMonad random
-
-randomRM :: (RandomGen g, Random a) ⇒ (a, a) → RngMonad g a
-randomRM = RngMonad . randomR
-
 instance Random a ⇒ Random (Vector3 a) where
-  random = readRngMonad $ liftM3 Vector3 randomM randomM randomM
-  randomR (Vector3 lx ly lz, Vector3 hx hy hz) = readRngMonad $
-    liftM3 Vector3 (randomRM (lx, hx)) (randomRM (ly, hy)) (randomRM (lz, hz))
+  random = runRand $ liftM3 Vector3 getRandom getRandom getRandom
+  randomR (Vector3 lx ly lz, Vector3 hx hy hz) = runRand $
+    liftM3 Vector3 (getRandomR (lx, hx)) (getRandomR (ly, hy)) (getRandomR (lz, hz))
 
-randomVector3 :: (Random a, Num a, RandomGen g) ⇒ a → RngMonad g (Vector3 a)
-randomVector3 size = randomRM (Vector3 (-size) (-size) (-size), Vector3 size size size)
+randomVector3 :: (Random a, Num a, MonadRandom m) ⇒ a → m (Vector3 a)
+randomVector3 size = getRandomR (Vector3 (-size) (-size) (-size), Vector3 size size size)
 
 -- GEOMETRY
 

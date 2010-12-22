@@ -2,14 +2,14 @@ import Gui (gui, GuiCallback(..))
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
-import Math ((<->), AnnotatedObstacle(..), readRngMonad, norm_2, Ray(..))
+import Math ((<->), AnnotatedObstacle(..), norm_2, Ray(..))
 import MyGL ()
-import System.Random (getStdGen)
 import MyUtil ((.), omni_map, read_config_file)
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
+import Control.Monad.Random (evalRandIO)
 
 name :: String
 name = "Player"
@@ -76,7 +76,7 @@ main = do
   --t ← fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
   --putStr $ unlines $ take 100 (show . $(project 0) . t)
 
-  tunnel ← to_graphnodes . ($(project 2) .) . fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
+  tunnel ← to_graphnodes . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
   --print $ length $ take 100000 bla
   let closest = head tunnel
   p ← newIORef $ iterate (tick_player gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
