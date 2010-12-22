@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, ViewPatterns #-}
 
-module Gui (GuiCallback(..), gui) where
+module Gui (GuiCallbacks(..), gui) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -82,14 +82,14 @@ data FireState = FireAsap | Fired | Idle
 data ClientGunState = ClientGunState { target :: Maybe V, fire_state :: FireState }
 type ClientState = Map Gun ClientGunState
 
-class GuiCallback c where
-  cc_tick :: c → IO ()
-  cc_players :: c → IO (Map String [Player])
-  cc_shootable_obstacles :: c → IO [AnnotatedObstacle]
-  cc_visible_obstacles :: c → IO [AnnotatedObstacle]
-  cc_release :: c → Gun → IO ()
-  cc_fire :: c → Gun → V → IO ()
-  cc_spawn :: c → IO ()
+data GuiCallbacks = GuiCallbacks
+  { cc_tick :: IO ()
+  , cc_players :: IO (Map String [Player])
+  , cc_shootable_obstacles :: IO [AnnotatedObstacle]
+  , cc_visible_obstacles :: IO [AnnotatedObstacle]
+  , cc_release :: Gun → IO ()
+  , cc_fire :: Gun → V → IO ()
+  , cc_spawn :: IO () }
 
 initialClientState :: ClientState
 initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
@@ -99,7 +99,7 @@ initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [Le
 data GuiContext = GuiContext { scheme :: Scheme, guiConfig :: GuiConfig }
 type Gui = ReaderT GuiContext IO
 
-onDisplay :: GuiCallback c ⇒ c → String → Camera → ClientState → Gui ()
+onDisplay :: GuiCallbacks → String → Camera → ClientState → Gui ()
 onDisplay cc myname Camera{..} clientState = do
   lift $ do
     GLUT.clear [ColorBuffer, DepthBuffer]
@@ -131,7 +131,7 @@ onReshape CameraConfig{..} s@(GLUT.Size w h) = do
   GLUT.perspective fov (fromIntegral w / fromIntegral h) 0.1 viewing_dist
   GLUT.matrixMode $= GLUT.Modelview 0
 
-onInput :: GuiCallback c ⇒ c → GuiConfig → IORef ClientState → IORef Bool → IORef Camera → IORef Position → Key → KeyState → a → b → IO ()
+onInput :: GuiCallbacks → GuiConfig → IORef ClientState → IORef Bool → IORef Camera → IORef Position → Key → KeyState → a → b → IO ()
 onInput cc GuiConfig{camConf=camConf@CameraConfig{..}, ..} clientStateRef pauseRef cameraRef cursorPos b bs _ _ =
   case () of
     _| k == restart_key → cc_spawn cc
@@ -166,8 +166,7 @@ onMotion CameraConfig{..} cameraRef cursorPosRef p@(Position x y) = do
     cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed })
   GLUT.postRedisplay Nothing
 
-setupCallbacks :: GuiCallback c ⇒
-  c → IORef ClientState → String → GameplayConfig → Gui ()
+setupCallbacks :: GuiCallbacks → IORef ClientState → String → GameplayConfig → Gui ()
 setupCallbacks cc clientStateRef name gameplayConfig = do
   context@GuiContext
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
@@ -291,7 +290,7 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: GuiCallback c ⇒ c → String → GameplayConfig → IO ()
+gui :: GuiCallbacks → String → GameplayConfig → IO ()
 gui c name gameplayConfig = do
 
   guiConfig@GuiConfig{..} :: GuiConfig
@@ -354,7 +353,7 @@ togglePause cam_conf pauseRef cameraRef cursorPosRef = do
   GLUT.motionCallback $= mc
   GLUT.passiveMotionCallback $= mc
 
-tick :: GuiCallback c ⇒ IORef Bool → c → IORef Camera → GuiConfig → IORef ClientState → String → GameplayConfig → IO ()
+tick :: IORef Bool → GuiCallbacks → IORef Camera → GuiConfig → IORef ClientState → String → GameplayConfig → IO ()
 tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
   (readIORef pauseRef >>=) $ flip unless $ do
     -- errs ← get errors
