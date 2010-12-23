@@ -1,10 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
-import Gui (gui, GuiCallbacks(..))
-import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
-import Logic (Player(..), GameplayConfig, release, fire, tick_player)
+import Gui (gui)
+import qualified Gui
+import qualified Logic
 import qualified Data.Map as Map
-import Math (Ray(..), V)
+import Logic (Player(..), GameplayConfig, tick_player, Gun)
+import Math (Ray(..), V, AnnotatedObstacle)
+import Data.Function (fix)
 import MyGL ()
 import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..))
@@ -14,33 +16,54 @@ import TerrainGenerator (TerrainCache, startGenerator, defaultWorldConfig)
 name :: String
 name = "Player"
 
-data State = State
-  { player :: IORef Player
-  , gameplayConfig :: GameplayConfig
+data Static = Static
+  { gameplayConfig :: GameplayConfig
   , informGenerator :: V → IO ()
   , getObstacles :: IO TerrainCache }
 
-makeCallbacks :: State → GuiCallbacks
-makeCallbacks State{..} = GuiCallbacks{..}
-  where
-    cc_tick = do
-      (_, obs) ← getObstacles
-      oldPlayer ← readIORef player
-      let newPlayer = tick_player obs gameplayConfig oldPlayer
-      informGenerator $ rayOrigin $ body newPlayer
-      writeIORef player newPlayer
-    cc_spawn = return ()
-    cc_release g = modifyIORef player $ release g
-    cc_fire g v = modifyIORef player $ fire gameplayConfig g v
-    cc_players = Map.singleton name . (:[]) . readIORef player
-    cc_visible_obstacles = snd . getObstacles
-    cc_shootable_obstacles = snd . getObstacles
+data State = State
+  { player :: Player
+  , obstacles :: [AnnotatedObstacle] }
+
+data Controller = Controller
+  { state :: State
+  , tick :: IO Controller
+  , release :: Gun → IO Controller
+  , fire :: Gun → V → IO Controller
+  , spawn :: IO Controller }
+
+guiState :: State → Gui.State
+guiState State{..} = Gui.State
+  { players = Map.singleton name [player]
+  , shootableObstacles = obstacles
+  , visibleObstacles = obstacles }
+
+guiController :: Controller → Gui.Controller
+guiController Controller{..} = fix $ \self → Gui.Controller
+  { state = guiState state
+  , tick = guiController . tick
+  , release = \g → guiController . release g
+  , fire = \g v → guiController . fire g v
+  , spawn = return self }
+
+control :: Static → State → Controller
+control Static{..} = go where
+  go state@State{..} = Controller
+    { tick = do
+        let newPlayer = tick_player obstacles gameplayConfig player
+        informGenerator $ rayOrigin $ body newPlayer
+        newObs ← snd . getObstacles
+        return $ go $ State newPlayer newObs
+    , fire = \g v → return $ go state{player = Logic.fire gameplayConfig g v player}
+    , release = \g → return $ go state{player = Logic.release g player}
+    , spawn = return $ go state, .. }
 
 main :: IO ()
 main = do
   gameplayConfig ← read_config_file "gameplay.txt"
   (informGenerator, getObstacles) ← startGenerator defaultWorldConfig
-  let initialPosition = (Vector3 0 1800 0)
-  informGenerator (Vector3 0 1800 0)
-  player ← newIORef $ Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
-  gui (makeCallbacks State{..}) name gameplayConfig
+  let
+    initialPosition = (Vector3 0 1800 0)
+    initialState = State (Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False) []
+  informGenerator initialPosition
+  gui (guiController $ control Static{..} initialState) name gameplayConfig
