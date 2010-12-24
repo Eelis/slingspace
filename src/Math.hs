@@ -19,6 +19,11 @@ instance Random a ⇒ Random (Vector3 a) where
   randomR (Vector3 lx ly lz, Vector3 hx hy hz) = runRand $
     liftM3 Vector3 (getRandomR (lx, hx)) (getRandomR (ly, hy)) (getRandomR (lz, hz))
 
+instance Random a ⇒ Random (Color4 a) where
+  random = runRand $ liftM4 Color4 getRandom getRandom getRandom getRandom
+  randomR (Color4 lr lg lb la, Color4 hr hg hb ha) = runRand $
+    liftM4 Color4 (getRandomR (lr, hr)) (getRandomR (lg, hg)) (getRandomR (lb, hb)) (getRandomR (la, ha))
+
 randomVector3 :: (Random a, Num a, MonadRandom m) ⇒ a → m (Vector3 a)
 randomVector3 size = getRandomR (Vector3 (-size) (-size) (-size), Vector3 size size size)
 
@@ -132,25 +137,29 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
       h :: AnnotatedTriangle → (V, V) → Bool
       h u (x, y) = isJust $  (rayThrough x y, \(z::GLdouble) (_::V) → z < 1) `collision` u
 
-data AnnotatedObstacle = AnnotatedObstacle
+data GeometricObstacle = GeometricObstacle
   { obstacleCenter :: !V
   , obstacleTriangles :: [AnnotatedTriangle]
   } deriving (Show, Read)
 
-annotateObstacle :: [AnnotatedTriangle] → AnnotatedObstacle
+data VisualObstacle = VisualObstacle
+  { geometricObstacle :: GeometricObstacle
+  , obstacleColor :: Color4 GLfloat }
+
+annotateObstacle :: [AnnotatedTriangle] → GeometricObstacle
 annotateObstacle triangles =
-  AnnotatedObstacle (foldr1 (<+>) (triangleCenter . triangles) </> realToFrac (length triangles)) triangles
+  GeometricObstacle (foldr1 (<+>) (triangleCenter . triangles) </> realToFrac (length triangles)) triangles
 
 behind :: V → Plane → Bool
 behind v Plane{..} = sameDirection (planePoint <-> v) planeNormal
 
-point_in_obstacle :: AnnotatedObstacle → V → Bool
+point_in_obstacle :: GeometricObstacle → V → Bool
 point_in_obstacle o v = and $ behind v . plane . obstacleTriangles o
 
-tri_in_obstacle :: AnnotatedObstacle → AnnotatedTriangle → Bool
+tri_in_obstacle :: GeometricObstacle → AnnotatedTriangle → Bool
 tri_in_obstacle o = or . (point_in_obstacle o .) .  tupleToList . triangleVertices
 
-instance Collision AnnotatedObstacle AnnotatedObstacle Bool where
+instance Collision GeometricObstacle GeometricObstacle Bool where
   collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
 
 at_max_z :: AnnotatedTriangle → GLdouble
@@ -161,7 +170,7 @@ at_min_y :: AnnotatedTriangle → GLdouble
 at_min_y (AnnotatedTriangle _ (Vector3 _ y0 _, Vector3 _ y1 _, Vector3 _ y2 _) _ _) =
   y0 `min` y1 `min` y2
 
-obst_min_y :: AnnotatedObstacle → GLdouble
+obst_min_y :: GeometricObstacle → GLdouble
 obst_min_y = minimum . (at_min_y .) . obstacleTriangles
 
 data Num a ⇒ MMatrix a = MMatrix a a a a a a a a a deriving Show

@@ -16,7 +16,7 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, AnnotatedObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
+import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
 import Data.List (sortBy)
 import MyGL ()
 import MyUtil ((.), minimumByMeasure)
@@ -29,7 +29,7 @@ data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
 
 data Greeting = Welcome GameplayConfig [NetworkObstacle] | PissOff String deriving (Show, Read)
 
-from_network_obs :: [NetworkObstacle] → [AnnotatedObstacle]
+from_network_obs :: [NetworkObstacle] → [GeometricObstacle]
 from_network_obs = map (\(NO l) → annotateObstacle $ (\(x, y, z) → annotateTriangle x y z) . l)
 
 data ClientToServerMsg = FireAt Gun V | Release Gun | Spawn deriving (Read, Show)
@@ -79,7 +79,7 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-tick_player :: [AnnotatedObstacle] → GameplayConfig → Player → Player
+tick_player :: [GeometricObstacle] → GameplayConfig → Player → Player
 tick_player collidable cfg p = if dead p then p else
   p { body = maybe newbody (flip Ray (Vector3 0 0 0)) co, guns = newguns {-, dead = isJust collision-} }
   where
@@ -94,27 +94,27 @@ tick_player collidable cfg p = if dead p then p else
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
--- obstacles_around :: Player → [AnnotatedObstacle]
+-- obstacles_around :: Player → [GeometricObstacle]
 -- obstacles_around = (gn_obst .) . neighbourhood . closest_obstacle
 
-find_target :: [AnnotatedObstacle] → Player → GameplayConfig → Ray → Maybe V
+find_target :: [GeometricObstacle] → Player → GameplayConfig → Ray → Maybe V
 find_target shootableObstacles player lcfg@GameplayConfig{..} gunRay =
   $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range) (shootableObstacles >>= obstacleTriangles)
 
 data GraphNode = GraphNode
-  { gn_obst :: AnnotatedObstacle
+  { gn_obst :: GeometricObstacle
   , gn_neighbours :: [GraphNode] }
 
 neighbourhood :: GraphNode → [GraphNode]
 neighbourhood gn = gn : gn_neighbours gn
 
-to_graphnode_map :: [AnnotatedObstacle] → Map V GraphNode
+to_graphnode_map :: [GeometricObstacle] → Map V GraphNode
 to_graphnode_map l =
   fix $ \m → Map.fromList $ (. l) $ \a →
-  let (AnnotatedObstacle ac _) = a in
+  let (GeometricObstacle ac _) = a in
   (,) ac $ GraphNode a $ mapMaybe (flip Map.lookup m . fst) $
   sortBy (\c b → compare (snd c) (snd b)) $
-  (\(AnnotatedObstacle x _) → (x, dist_sqrd ac x)) . l
+  (\(GeometricObstacle x _) → (x, dist_sqrd ac x)) . l
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z

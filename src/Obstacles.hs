@@ -6,7 +6,7 @@ module Obstacles
   ) where
 
 import MyUtil ((.), bounded)
-import Math (V, (<->), (<+>), (<*>), AnnotatedObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
+import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
 import MyGL ()
 import Control.Monad (replicateM)
 import Graphics.UI.GLUT
@@ -22,11 +22,11 @@ aboveSurfaceTri :: AnnotatedTriangle → Bool
 aboveSurfaceTri (AnnotatedTriangle _ (x, y, z) _) =
   aboveSurface x && aboveSurface y && aboveSurface z
 
-aboveSurfaceObs :: AnnotatedObstacle → Bool
-aboveSurfaceObs (AnnotatedObstacle a b c d) = and $ map aboveSurfaceTri [a, b, c, d]
+aboveSurfaceObs :: GeometricObstacle → Bool
+aboveSurfaceObs (GeometricObstacle a b c d) = and $ map aboveSurfaceTri [a, b, c, d]
 -}
 
-randomObs :: (Functor m, MonadRandom m) ⇒ V → GLdouble → m AnnotatedObstacle
+randomObs :: (Functor m, MonadRandom m) ⇒ V → GLdouble → m GeometricObstacle
 randomObs center size = do
   let q = (center <+>) . randomVector3 size
   x ← q; y ← q; z ← q
@@ -40,7 +40,7 @@ data TunnelConfig = TunnelConfig
   , obstacle_size, init_tunnel_width, max_tunnel_width, min_tunnel_width :: GLdouble
   } deriving (Show, Read)
 
-tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → [AnnotatedObstacle] → V → GLdouble → GLdouble → V → m [AnnotatedObstacle]
+tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → [GeometricObstacle] → V → GLdouble → GLdouble → V → m [GeometricObstacle]
 tunnel cf prev dir@(Vector3 dx dy dz) width obssize from = do
   coff ← getRandomR (Vector3 (-width) (-width) 0, Vector3 width width 0)
   newobst ← randomObs (from <+> coff) obssize
@@ -58,14 +58,14 @@ tunnel cf prev dir@(Vector3 dx dy dz) width obssize from = do
         (bounded (dy + yChange) (-od) od)
         dz) newwidth obssize (Vector3 nfx (bounded nfy width 6500) nfz)
 
-niceTunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [AnnotatedObstacle]
+niceTunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [GeometricObstacle]
 niceTunnel cf = take 150 . tunnel cf []
   (Vector3 0 0 (- obstacle_density cf)) -- dir
   (init_tunnel_width cf)
   (obstacle_size cf) -- obstacle size
   (Vector3 0 1000 0) -- from
 
-bigField :: (Functor m, MonadRandom m) ⇒ m [AnnotatedObstacle]
+bigField :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
 bigField = replicateM 1600 $ do
   c ← getRandomR (Vector3 0 500 0, Vector3 56000 2000 56000)
   randomObs c 800
@@ -91,19 +91,27 @@ data InfiniteTunnelConfig = InfiniteTunnelConfig
 -}
 
 glDouble :: Double → GLdouble
+glFloat :: Float → GLfloat
 glDouble = realToFrac
+glFloat = realToFrac
 unGLdouble :: GLdouble → Double
+unGLfloat :: GLfloat → Float
 unGLdouble = realToFrac
-  -- Todo: These are horrible, and were added just to support the following instance, needed to make things compile again now that GLdouble is a newtype with a hidden constructor.
+unGLfloat = realToFrac
+-- Todo: These are horrible, and were added just to support the following instances, needed to make things compile again now that GLdouble is a newtype with a hidden constructor.
+
+instance Random GLfloat where
+  randomR (lo, hi) = first glFloat . randomR (unGLfloat lo, unGLfloat hi)
+  random = first glFloat . random
 
 instance Random GLdouble where
   randomR (lo, hi) = first glDouble . randomR (unGLdouble lo, unGLdouble hi)
   random = first glDouble . random
 
-infinite_tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [(V, V, AnnotatedObstacle)]
+infinite_tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [(V, V, GeometricObstacle)]
 infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Vector3 0 0 0) {- from -}
   where
-    tu :: (Functor m, MonadRandom m) ⇒ [AnnotatedObstacle] → GLdouble → GLdouble → V → m [(V, V, AnnotatedObstacle)]
+    tu :: (Functor m, MonadRandom m) ⇒ [GeometricObstacle] → GLdouble → GLdouble → V → m [(V, V, GeometricObstacle)]
     tu prev ang width from = do
       coff ← getRandomR (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
       newobst ← randomObs (from <+> coff) (obstacle_size cf)
