@@ -4,26 +4,28 @@ import Gui (gui)
 import qualified Gui
 import qualified Logic
 import qualified Data.Map as Map
+import Graphics.Rendering.OpenGL.GL (GLdouble)
 import Logic (Player(..), GameplayConfig, tick_player, Gun)
-import Math (Ray(..), V, VisualObstacle(..), GeometricObstacle)
+import Math (Ray(..), V, GeometricObstacle)
 import Data.Function (fix)
 import MyGL ()
 import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..))
 import Prelude hiding ((.))
 import qualified TerrainGenerator
+import Data.Array.Storable (StorableArray)
 
 name :: String
 name = "Player"
 
 data Static = Static
   { gameplayConfig :: GameplayConfig
-  , contactGenerator :: V → IO ([GeometricObstacle], [VisualObstacle]) }
+  , contactGenerator :: V → IO ([GeometricObstacle], [StorableArray Int GLdouble]) }
 
 data State = State
   { player :: Player
   , shootableObstacles :: [GeometricObstacle]
-  , visibleObstacles :: [VisualObstacle] }
+  , visibleObstacles :: [StorableArray Int GLdouble] }
 
 data Controller = Controller
   { state :: State

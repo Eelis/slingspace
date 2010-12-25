@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns #-}
 
 module Math where
 
@@ -44,13 +44,13 @@ Vector3 x y z <*> s = Vector3 (x * s) (y * s) (z * s)
 Vector3 x y z </> s = Vector3 (x / s) (y / s) (z / s)
 
 tov :: Vector3 a → Vertex3 a
-tov (Vector3 x y z) = Vertex3 x y z
+tov (Vector3 !x !y !z) = Vertex3 x y z
 
 vectorToNormal :: Vector3 a → Normal3 a
-vectorToNormal (Vector3 x y z) = Normal3 x y z
+vectorToNormal (Vector3 !x !y !z) = Normal3 x y z
 
 norm_2 :: Floating a ⇒ Vector3 a → a
-norm_2 (Vector3 x y z) = sqrt $ x*x + y*y + z*z
+norm_2 (Vector3 !x !y !z) = sqrt $ x*x + y*y + z*z
 
 normalize_v :: Floating a ⇒ Vector3 a → Vector3 a
 normalize_v v = v </> (norm_2 v)

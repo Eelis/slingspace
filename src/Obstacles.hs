@@ -7,7 +7,7 @@ module Obstacles
 
 import MyUtil ((.), bounded)
 import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
-import MyGL ()
+import MyGL (glFloat, glDouble, unGLfloat, unGLdouble)
 import Control.Monad (replicateM)
 import Graphics.UI.GLUT
 import Prelude hiding ((.))
@@ -89,16 +89,6 @@ data InfiniteTunnelConfig = InfiniteTunnelConfig
   , obstacle_size, init_tunnel_width, max_tunnel_width, min_tunnel_width :: GLdouble
   } deriving (Show, Read)
 -}
-
-glDouble :: Double → GLdouble
-glFloat :: Float → GLfloat
-glDouble = realToFrac
-glFloat = realToFrac
-unGLdouble :: GLdouble → Double
-unGLfloat :: GLfloat → Float
-unGLdouble = realToFrac
-unGLfloat = realToFrac
--- Todo: These are horrible, and were added just to support the following instances, needed to make things compile again now that GLdouble is a newtype with a hidden constructor.
 
 instance Random GLfloat where
   randomR (lo, hi) = first glFloat . randomR (unGLfloat lo, unGLfloat hi)
