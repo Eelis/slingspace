@@ -1,13 +1,13 @@
 {-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell #-}
 
-module TerrainGenerator (Cache(..), start, defaultConfig, sectorId, SectorId, cubeSize, bytesPerVertex, totalVertices, sectors, totalBytes, bytesPerSector, doublesPerVector, bytesPerDouble) where
+module TerrainGenerator (Cache(..), start, defaultConfig, sectorSize, sectorId, SectorId, cubeSize, bytesPerVertex, totalVertices, sectors, totalBytes, bytesPerSector, doublesPerVector, bytesPerDouble, sectorCenter) where
 
 import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL (GLdouble, GLfloat, Vector3(..), Color4(..))
-import Math ((<+>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod, Sphere(..))
+import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod, Sphere(..))
 import Data.Bits (xor)
 import Control.Monad (replicateM, liftM3, forM, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
@@ -70,17 +70,23 @@ vectorComponents (Vector3 x y z) = [x, y, z]
 listArray :: (MArray a e m) ⇒ [e] → m (a Int e)
 listArray l = newListArray (0, length l - 1) l
 
+sectorCenter :: Config → SectorId → V
+sectorCenter Config{..} = (<*> sectorSize) . (fromInteger .)
+
+seed :: SectorId → Int
+seed (Vector3 x y z) = fromInteger $ xor x $ xor y z
+
 buildSector :: Config → SectorId → IO Sector
-buildSector Config{..} (Vector3 x y z) = do
+buildSector config@Config{..} sid = do
   let
     halfSectorSize = sectorSize / 2
     f = do
       obstacleColor ← getRandomR (Color4 0.3 0.3 0.3 1, Color4 1 1 1 1)
       replicateM obstaclesPerSector $ do
         c ← getRandomR (Vector3 (-halfSectorSize) (-halfSectorSize) (-halfSectorSize), Vector3 halfSectorSize halfSectorSize halfSectorSize)
-        geometricObstacle ← randomObs (c <+> Vector3 (fromInteger x * sectorSize) (fromInteger y * sectorSize) (fromInteger z * sectorSize)) 800
+        geometricObstacle ← randomObs (c <+> sectorCenter config sid) 800
         return VisualObstacle{..}
-    obstacles = evalRand f $ mkStdGen $ fromInteger $ xor x $ xor y z
+    obstacles = evalRand f $ mkStdGen $ seed sid
   sectorVertices ← listArray $ concat
     [ vectorComponents vertex ++ vectorComponents triangleNormal
     | AnnotatedTriangle{..} ← geometricObstacle . obstacles >>= obstacleTriangles
@@ -113,7 +119,7 @@ start config = do
     let sectorsWeWant = Set.map{-Monotonic-} (<+> newSector) ball
     foldM (\ss sid → do
       y ← buildSector config sid
-      deepseq y $ do
+      --deepseq y $ do
       let n = Map.insert sid y ss
       atomically $ writeTChan toBuffer (sid, sectorVertices y) >> writeTVar mp n
       return n)

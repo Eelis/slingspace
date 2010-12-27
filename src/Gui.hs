@@ -20,7 +20,8 @@ import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tu
 import Prelude hiding ((.))
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
-import TerrainGenerator (bytesPerVertex, totalVertices, totalBytes, bytesPerDouble, doublesPerVector)
+import TerrainGenerator (sectorCenter, bytesPerVertex, totalVertices, totalBytes, bytesPerDouble, doublesPerVector, sectorId)
+import qualified TerrainGenerator
 
 type SectorId = Vector3 Integer
 
@@ -123,6 +124,8 @@ onDisplay State{..} myname Camera{..} clientState = do
   -- lift $ drawFutures players
   --drawFloor (shootableObstacles >>= obstacleTriangles) me
   drawRopes (head . players)
+  drawOrientation (head . players)
+  drawSectorBorders $ head $ head $ Map.elems players
   drawCrossHairs clientState
   lift swapBuffers
 
@@ -280,6 +283,30 @@ drawRopes players = do
         vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
   return ()
+
+drawOrientation :: Map String Player → Gui ()
+drawOrientation players = do
+  scheme@Scheme{..} ← asks scheme
+  GuiConfig{..} ← asks guiConfig
+  lift $ do
+  GLUT.lineWidth $= rope_line_width
+  renderPrimitive Lines $ forM players $ \Player{..} → do
+    vertex $ tov $ rayOrigin body <+> Vector3 (-100) 0 0
+    vertex $ tov $ rayOrigin body <+> Vector3 100 0 0
+    vertex $ tov $ rayOrigin body <+> Vector3 0 0 (-100)
+    vertex $ tov $ rayOrigin body <+> Vector3 0 0 100
+  return ()
+
+drawSectorBorders :: Player → Gui ()
+drawSectorBorders Player{..} = do
+  scheme@Scheme{..} ← asks scheme
+  GuiConfig{..} ← asks guiConfig
+  lift $ do
+  let u = sectorId TerrainGenerator.defaultConfig (rayOrigin body)
+  forM_ [u, u<+>Vector3 0 0 1, u<+>Vector3 0 0 (-1),u<+>Vector3 0 1 0, u<+>Vector3 0 (-1) 0,u<+>Vector3 1 0 0, u<+>Vector3 (-1) 0 0] $ \j → do
+    GLUT.preservingMatrix $ do
+      GLUT.translate $ sectorCenter TerrainGenerator.defaultConfig j
+      GLUT.renderObject GLUT.Wireframe $ GLUT.Cube (TerrainGenerator.sectorSize TerrainGenerator.defaultConfig)
 
 drawObstacles :: Gui ()
 drawObstacles = do
