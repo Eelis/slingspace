@@ -19,8 +19,10 @@ import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
 import Prelude hiding ((.))
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
-import Data.Array.Storable
-import Foreign.Ptr (plusPtr)
+import Foreign.Ptr (nullPtr, plusPtr)
+import TerrainGenerator (bytesPerVertex, totalVertices, totalBytes, bytesPerDouble, doublesPerVector)
+
+type SectorId = Vector3 Integer
 
 -- Configuration:
 
@@ -86,12 +88,11 @@ type ClientState = Map Gun ClientGunState
 
 data State = State
   { players :: Map String [Player]
-  , shootableObstacles :: [GeometricObstacle]
-  , visibleObstacles :: [StorableArray Int GLdouble] }
+  , shootableObstacles :: [GeometricObstacle] }
 
 data Controller = Controller
   { state :: State
-  , tick :: IO Controller
+  , tick :: GLUT.BufferObject → IO Controller
   , release :: Gun → IO Controller
   , fire :: Gun → V → IO Controller
   , spawn :: IO Controller }
@@ -101,7 +102,7 @@ initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [Le
 
 -- Callbacks:
 
-data GuiContext = GuiContext { scheme :: Scheme, guiConfig :: GuiConfig }
+data GuiContext = GuiContext { obstacleBuffer :: GLUT.BufferObject, scheme :: Scheme, guiConfig :: GuiConfig }
 type Gui = ReaderT GuiContext IO
 
 onDisplay :: State → String → Camera → ClientState → Gui ()
@@ -117,10 +118,10 @@ onDisplay State{..} myname Camera{..} clientState = do
   whenJust (Map.lookup myname players) $ \(me:_) → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers (head . players)
-  drawObstacles visibleObstacles
+  drawObstacles
   lift $ lighting $= Disabled
   -- lift $ drawFutures players
-  --drawFloor (geometricObstacle . visibleObstacles >>= obstacleTriangles) me
+  --drawFloor (shootableObstacles >>= obstacleTriangles) me
   drawRopes (head . players)
   drawCrossHairs clientState
   lift swapBuffers
@@ -183,12 +184,18 @@ setupCallbacks initialController clientStateRef name gameplayConfig = do
   cameraRef ← newIORef $ Camera cam_init_dist 0 0
   controllerRef ← newIORef initialController
 
+  lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
+
   GLUT.reshapeCallback $= Just (onReshape camConf)
   GLUT.displayCallback $= do
     camera ← readIORef cameraRef
     clientState ← readIORef clientStateRef
     Controller{..} ← readIORef controllerRef
     runReaderT (onDisplay state name camera clientState) context
+    new ← getMonotonicMilliSecs
+    old ← readIORef lastDisplayTime
+    putStrLn $ replicate (fromIntegral $ new - old) 'x'
+    writeIORef lastDisplayTime new
   GLUT.keyboardMouseCallback $= Just (\ x y z w →
     readIORef controllerRef
       >>= onInput guiConfig clientStateRef pauseRef cameraRef cursorPos x y z w
@@ -196,12 +203,13 @@ setupCallbacks initialController clientStateRef name gameplayConfig = do
 
   (getMonotonicMilliSecs >>=) $ fix $ \self next → do
     controller ← readIORef controllerRef >>=
-      guiTick pauseRef cameraRef guiConfig clientStateRef name gameplayConfig
+      guiTick context pauseRef cameraRef clientStateRef name gameplayConfig
     writeIORef controllerRef controller
     tn ← getMonotonicMilliSecs
     let next' = next + tickDurationMilliSecs
-    if tn >= next then self next' else do
-    GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
+    if tn >= next
+      then self next'
+      else GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
 
 -- Drawers:
 
@@ -273,20 +281,19 @@ drawRopes players = do
         vertex $ tov $ rayOrigin rope_ray
   return ()
 
-drawObstacles :: [StorableArray Int GLdouble] → Gui ()
-drawObstacles ars = do
-  Scheme{..} ← asks scheme
+drawObstacles :: Gui ()
+drawObstacles = do
+  GuiContext{scheme=Scheme{..}, ..} ← ask
   lift $ do
   GLUT.materialDiffuse Front $= Color4 1 1 1 1
   GLUT.materialAmbient Front $= Color4 0.4 0.6 0.8 1
   GLUT.clientState GLUT.VertexArray $= Enabled
   GLUT.clientState GLUT.NormalArray $= Enabled
-  forM_ ars $ \a → do
-    (_, n) ← getBounds a
-    withStorableArray a $ \p → do
-    GLUT.arrayPointer GLUT.VertexArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double (6*8) p
-    GLUT.arrayPointer GLUT.NormalArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double (6*8) (plusPtr p (3*8))
-    GLUT.drawArrays Triangles 0 (fromIntegral $ n`div`6)
+  GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
+  GLUT.arrayPointer GLUT.VertexArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex nullPtr
+  GLUT.arrayPointer GLUT.NormalArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (doublesPerVector*bytesPerDouble))
+  GLUT.drawArrays Triangles 0 (fromIntegral totalVertices)
+  GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
   GLUT.clientState GLUT.VertexArray $= Disabled
   GLUT.clientState GLUT.NormalArray $= Disabled
 
@@ -356,7 +363,12 @@ gui controller name gameplayConfig = do
   GLUT.blend $= Enabled
   GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
 
-  runReaderT (setupCallbacks controller clientState name gameplayConfig) (GuiContext scheme guiConfig)
+  [obstacleBuffer] ← GLUT.genObjectNames 1
+  GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
+  GLUT.bufferData GLUT.ArrayBuffer $= (fromIntegral totalBytes, nullPtr, GLUT.DynamicDraw)
+  GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
+
+  runReaderT (setupCallbacks controller clientState name gameplayConfig) GuiContext{..}
 
   GLUT.mainLoop
 
@@ -373,8 +385,8 @@ togglePause cam_conf pauseRef cameraRef cursorPosRef = do
   GLUT.motionCallback $= mc
   GLUT.passiveMotionCallback $= mc
 
-guiTick :: IORef Bool → IORef Camera → GuiConfig → IORef ClientState → String → GameplayConfig → Controller → IO Controller
-guiTick pauseRef cameraRef guiConfig clientStateRef myname gameplayConfig controller = do
+guiTick :: GuiContext → IORef Bool → IORef Camera → IORef ClientState → String → GameplayConfig → Controller → IO Controller
+guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig controller = do
   paused ← readIORef pauseRef
   if paused then return controller else do
 
@@ -405,6 +417,5 @@ guiTick pauseRef cameraRef guiConfig clientStateRef myname gameplayConfig contro
           _ → return gs)
           controller
           (Map.toList clientState)
-
       GLUT.postRedisplay Nothing
-      tick newController
+      tick newController obstacleBuffer
