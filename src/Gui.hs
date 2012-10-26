@@ -8,7 +8,7 @@ import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
 import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles, GeometricObstacle, VisualObstacle(..))
-import Maybe (isJust)
+import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
