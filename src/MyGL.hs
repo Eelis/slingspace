@@ -1,3 +1,4 @@
+{-# LANGUAGE UnicodeSyntax #-}
 {-# OPTIONS -w #-}
 
 module MyGL where

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables #-}
 
 module Logic
   ( Gun(..), Rope(..)
