@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving #-}
 
 module Gui (Controller(..), State(..), gui) where
 
@@ -24,6 +24,11 @@ import TerrainGenerator (sectorCenter, bytesPerVertex, totalVertices, totalBytes
 import qualified TerrainGenerator
 
 type SectorId = Vector3 Integer
+
+deriving instance Read Key
+deriving instance Read KeyState
+deriving instance Read MouseButton
+deriving instance Read GLUT.SpecialKey
 
 -- Configuration:
 
