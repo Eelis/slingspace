@@ -21,6 +21,12 @@ data-files:
 category: games
 
 executable: slingspace
+main-is: Driver.hs
+hs-source-dirs: src
+ghc-options: -fglasgow-exts -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
+extensions: TemplateHaskell CPP ForeignFunctionInterface
+
+executable: slingspace-inf
 main-is: local-infinite.hs
 hs-source-dirs: src
 ghc-options: -fglasgow-exts -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind

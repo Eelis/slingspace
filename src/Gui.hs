@@ -7,12 +7,12 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4, GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles, AnnotatedObstacle)
 import Data.Maybe (isJust)
 import Control.Monad (when, unless, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, obstacles_around, toFloor)
+import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, toFloor)
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
@@ -85,6 +85,8 @@ type ClientState = Map Gun ClientGunState
 class GuiCallback c where
   cc_tick :: c → IO ()
   cc_players :: c → IO (Map String [Player])
+  cc_shootable_obstacles :: c → IO [AnnotatedObstacle]
+  cc_visible_obstacles :: c → IO [AnnotatedObstacle]
   cc_release :: c → Gun → IO ()
   cc_fire :: c → Gun → V → IO ()
   cc_spawn :: c → IO ()
@@ -111,11 +113,12 @@ onDisplay cc myname Camera{..} clientState = do
   whenJust (Map.lookup myname players) $ \(me:_) → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers (head . players)
-  let visible_obs = take 400 (obstacles_around me) >>= obstacleTriangles
-  drawObstacles visible_obs
+  visible_obs ← lift $ cc_visible_obstacles cc
+  --let visible_obs = take 400 (obstacles_around me) >>= obstacleTriangles
+  drawObstacles (visible_obs >>= obstacleTriangles)
   lift $ lighting $= Disabled
   -- lift $ drawFutures players
-  drawFloor visible_obs me
+  drawFloor (visible_obs >>= obstacleTriangles) me
   drawRopes (head . players)
   drawCrossHairs clientState
   lift swapBuffers
@@ -358,6 +361,7 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
     -- print $ "[" ++ (show errs) ++ "]"
 
   maybePlayer ← Map.lookup myname . cc_players cc
+  shootableObstacles ← cc_shootable_obstacles cc
 
   whenJust maybePlayer $ \(player@Player{..}:_) → do
 
@@ -369,7 +373,7 @@ tick pauseRef cc cameraRef guiConfig clientStateRef myname gameplayConfig = do
 
   writeIORef clientStateRef $ flip Map.mapWithKey clientState $
     \(gunGuiConfig guiConfig → GunGuiConfig{..}) g → g { target =
-     find_target player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
+     find_target shootableObstacles player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
       `x_rot_vector` (gun_xrot + cam_xrot)
       `y_rot_vector` (gun_yrot + cam_yrot) }
 

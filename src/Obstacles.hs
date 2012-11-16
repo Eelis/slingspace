@@ -2,6 +2,7 @@ module Obstacles
   ( niceTunnel, bigField
   , infinite_tunnel
   , TunnelConfig
+  , randomObs
   ) where
 
 import MyUtil ((.), bounded)

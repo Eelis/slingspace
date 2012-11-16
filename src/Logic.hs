@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns #-}
 
 module Logic
   ( Gun(..), Rope(..)
@@ -8,7 +8,7 @@ module Logic
   , Greeting(..)
   , ClientToServerMsg(..), ServerToClientMsg(..)
   , GraphNode(..), SerializablePlayer(..)
-  , to_graphnode_map, update_player, serialize_player, obstacles_around
+  , to_graphnode_map, update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
   , toFloor
   ) where
@@ -54,14 +54,13 @@ data SerializablePlayer = SerializablePlayer !Ray (Map Gun Rope) Bool deriving (
 data Player = Player
   { body :: !Ray
   , guns :: Map Gun Rope
-  , dead :: Bool
-  , closest_obstacle :: GraphNode }
+  , dead :: Bool }
 
 update_player :: Player → SerializablePlayer → Player
 update_player p (SerializablePlayer x y z) = p { body = x, guns = y, dead = z }
 
 serialize_player :: Player → SerializablePlayer
-serialize_player (Player x y z _) = SerializablePlayer x y z
+serialize_player = error "broken" -- (Player x y z _) = SerializablePlayer x y z
 
 fire :: GameplayConfig → Gun → V → Player → Player
 fire c g t p = p { guns = Map.insert g (Rope (Ray pos dir) eta) (guns p) }
@@ -80,9 +79,9 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-tick_player :: GameplayConfig → Player → Player
-tick_player cfg p = if dead p then p else
-  p { body = maybe newbody (flip Ray (Vector3 0 0 0)) co, guns = newguns {-, dead = isJust collision-}, closest_obstacle = new_closest }
+tick_player :: [AnnotatedObstacle] → GameplayConfig → Player → Player
+tick_player collidable cfg p = if dead p then p else
+  p { body = maybe newbody (flip Ray (Vector3 0 0 0)) co, guns = newguns {-, dead = isJust collision-} }
   where
    oldpos@(Vector3 oldx oldy oldz) = rayOrigin $ body p
    oldmov = rayDirection $ body p
@@ -90,18 +89,17 @@ tick_player cfg p = if dead p then p else
    newbody = Ray
     (oldpos <+> oldmov)
     ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> oldpos); _ → m) oldmov $ guns p)) <*> friction cfg)
-   new_closest = minimumByMeasure (dist_sqrd oldpos . obstacleCenter . gn_obst) (take 40 $ neighbourhood $ closest_obstacle p)
-   co = if oldy < 0 then Just (toFloor oldpos) else $(project 1) . collision (Ray oldpos oldmov, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (take 10 (obstacles_around p) >>= obstacleTriangles)
+   co = if oldy < 0 then Just (toFloor oldpos) else $(project 1) . collision (Ray oldpos oldmov, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (collidable >>= obstacleTriangles)
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-obstacles_around :: Player → [AnnotatedObstacle]
-obstacles_around p = a : gn_obst . n where GraphNode a n = closest_obstacle p
+-- obstacles_around :: Player → [AnnotatedObstacle]
+-- obstacles_around = (gn_obst .) . neighbourhood . closest_obstacle
 
-find_target :: Player → GameplayConfig → Ray → Maybe V
-find_target pl lcfg gunRay =
-  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body pl) v < square (shooting_range lcfg)) (take 150 (obstacles_around pl) >>= obstacleTriangles)
+find_target :: [AnnotatedObstacle] → Player → GameplayConfig → Ray → Maybe V
+find_target shootableObstacles player lcfg@GameplayConfig{..} gunRay =
+  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range) (shootableObstacles >>= obstacleTriangles)
 
 data GraphNode = GraphNode
   { gn_obst :: AnnotatedObstacle

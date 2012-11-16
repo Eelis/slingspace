@@ -14,18 +14,16 @@ import Control.Monad.Random (evalRandIO)
 name :: String
 name = "Player"
 
-data LocalGuiCallback = LCC (IORef [Player]) GameplayConfig
-
-dist_to_closest :: Player → GLdouble
-dist_to_closest p = norm_2 (v <-> rayOrigin (body p))
-  where (GraphNode (AnnotatedObstacle v _) _) = closest_obstacle p
+data LocalGuiCallback = LCC (IORef [Player]) GameplayConfig [AnnotatedObstacle]
 
 instance GuiCallback LocalGuiCallback where
-  cc_tick (LCC r _) = modifyIORef r tail
-  cc_spawn (LCC _ _) = return ()
-  cc_release (LCC p c) g = modifyIORef p $ iterate (tick_player c) . release g . head
-  cc_fire (LCC p c) g v = modifyIORef p $ iterate (tick_player c) . fire c g v . head
-  cc_players (LCC p _) = Map.singleton name . readIORef p
+  cc_tick (LCC r _ _) = modifyIORef r tail
+  cc_spawn (LCC _ _ _) = return ()
+  cc_release (LCC p c a) g = modifyIORef p $ iterate (tick_player a c) . release g . head
+  cc_fire (LCC p c a) g v = modifyIORef p $ iterate (tick_player a c) . fire c g v . head
+  cc_players (LCC p _ _) = Map.singleton name . readIORef p
+  cc_visible_obstacles (LCC _ _ t) = return t
+  cc_shootable_obstacles (LCC _ _ t) = return t
 
 interleave :: [a] → [a] → [a]
 interleave [] x = x
@@ -76,8 +74,9 @@ main = do
   --t ← fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
   --putStr $ unlines $ take 100 (show . $(project 0) . t)
 
-  tunnel ← to_graphnodes . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
+  atunnel :: [AnnotatedObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
+  let tunnel = to_graphnodes atunnel
   --print $ length $ take 100000 bla
   let closest = head tunnel
-  p ← newIORef $ iterate (tick_player gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False closest
-  gui (LCC p gp_cfg) name gp_cfg
+  p ← newIORef $ iterate (tick_player atunnel gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False
+  gui (LCC p gp_cfg atunnel) name gp_cfg
