@@ -3,12 +3,12 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , find_target, fire, release, tick_player, move
+  , find_target, fire, release, tickPlayer, move
   , GameplayConfig(..)
   , Greeting(..)
   , ClientToServerMsg(..), ServerToClientMsg(..)
-  , GraphNode(..), SerializablePlayer(..)
-  , to_graphnode_map, update_player, serialize_player
+  , SerializablePlayer(..)
+  , update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
   , toFloor
   ) where
@@ -17,11 +17,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
-import Data.List (sortBy)
 import MyGL ()
 import MyUtil ((.))
-import Data.Maybe (mapMaybe)
-import Control.Monad.Fix (fix)
 import TupleProjection (project)
 import Prelude hiding ((.))
 
@@ -79,39 +76,29 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-tick_player :: [GeometricObstacle] → GameplayConfig → Player → Player
-tick_player collidable cfg p = if dead p then p else
-  p { body = maybe newbody (flip Ray (Vector3 0 0 0)) co, guns = newguns {-, dead = isJust collision-} }
+tickPlayer :: [GeometricObstacle] → GameplayConfig → Player → Player
+tickPlayer collidable cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
+    { body = newBody, guns = tickGun . guns {-, dead = isJust collision-} }
   where
-   oldpos@(Vector3 oldx oldy oldz) = rayOrigin $ body p
-   oldmov = rayDirection $ body p
-   newguns = (. guns p) $ \r → case r of Rope ray (n + 1) → Rope (progressRay ray) n; _ → r
-   newbody = Ray
-    (oldpos <+> oldmov)
-    ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> oldpos); _ → m) oldmov $ guns p)) <*> friction cfg)
-   co = if oldy < 0 then Just (toFloor oldpos) else $(project 1) . collision (Ray oldpos oldmov, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (collidable >>= obstacleTriangles)
+    Vector3 _ oldy _ = rayOrigin
+    tickGun (Rope ray (n + 1)) = Rope (progressRay ray) n
+    tickGun r = r
+    newBody
+      | Just d ← collisionPos = Ray d (Vector3 0 0 0)
+      | otherwise = Ray
+        (rayOrigin <+> rayDirection)
+        ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns)) <*> friction cfg)
+    collisionPos
+      | oldy < 0 = Just (toFloor rayOrigin)
+      | otherwise = $(project 1) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filter (collision body . obstacleSphere) collidable >>= obstacleTriangles)
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
 find_target :: [GeometricObstacle] → Player → GameplayConfig → Ray → Maybe V
 find_target shootableObstacles player lcfg@GameplayConfig{..} gunRay =
-  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range) (shootableObstacles >>= obstacleTriangles)
-
-data GraphNode = GraphNode
-  { gn_obst :: GeometricObstacle
-  , gn_neighbours :: [GraphNode] }
-
-neighbourhood :: GraphNode → [GraphNode]
-neighbourhood gn = gn : gn_neighbours gn
-
-to_graphnode_map :: [GeometricObstacle] → Map V GraphNode
-to_graphnode_map l =
-  fix $ \m → Map.fromList $ (. l) $ \a →
-  let (GeometricObstacle ac _) = a in
-  (,) ac $ GraphNode a $ mapMaybe (flip Map.lookup m . fst) $
-  sortBy (\c b → compare (snd c) (snd b)) $
-  (\(GeometricObstacle x _) → (x, dist_sqrd ac x)) . l
+  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
+    (filter (collision gunRay . obstacleSphere) shootableObstacles >>= obstacleTriangles)
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z

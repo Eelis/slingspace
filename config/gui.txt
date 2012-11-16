@@ -6,7 +6,7 @@ GuiConfig
 , floorConf = Just Shadows
 , playerSize = 35
 , camConf = CameraConfig
-  { viewing_dist = 20000
+  { viewing_dist = 30000
   , fov = 45
   , cam_init_dist = 600
   , cam_min_dist = 40

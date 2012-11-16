@@ -59,7 +59,7 @@ cross_prod :: Num a ⇒ Vector3 a → Vector3 a → Vector3 a
 cross_prod (Vector3 x y z) (Vector3 x' y' z') =
   Vector3 ((y * z') - (z * y')) ((z * x') - (x * z')) ((x * y') - (y * x'))
 
-inner_prod :: Floating a ⇒ Vector3 a → Vector3 a → a
+inner_prod :: Num a ⇒ Vector3 a → Vector3 a → a
 inner_prod (Vector3 x y z) (Vector3 x' y' z') = x*x' + y*y' + z*z'
 
 {-# INLINE inner_prod #-}
@@ -91,6 +91,17 @@ plane :: AnnotatedTriangle → Plane
 plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
 class Collision a b c | a b → c where collision :: a → b → c
+
+data Sphere = Sphere { sphereCenter :: V, sphereSquaredRadius :: GLdouble }
+  deriving (Read, Show)
+
+instance Collision Ray Sphere Bool where
+  collision Ray{..} Sphere{..} = b*b - 4*a*c >= 0
+    where
+      a = inner_prod rayDirection rayDirection
+      b = 2 * inner_prod rayDirection o
+      c = inner_prod o o - sphereSquaredRadius
+      o = rayOrigin <-> sphereCenter
 
 sameDirection :: V → V → Bool
 sameDirection a b = inner_prod a b >= 0
@@ -138,7 +149,7 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
       h u (x, y) = isJust $  (rayThrough x y, \(z::GLdouble) (_::V) → z < 1) `collision` u
 
 data GeometricObstacle = GeometricObstacle
-  { obstacleCenter :: !V
+  { obstacleSphere :: !Sphere
   , obstacleTriangles :: [AnnotatedTriangle]
   } deriving (Show, Read)
 
@@ -146,9 +157,15 @@ data VisualObstacle = VisualObstacle
   { geometricObstacle :: GeometricObstacle
   , obstacleColor :: Color4 GLfloat }
 
+squaredDistance :: V → V → GLdouble
+squaredDistance a b = inner_prod d d
+  where d = a <-> b
+
 annotateObstacle :: [AnnotatedTriangle] → GeometricObstacle
-annotateObstacle triangles =
-  GeometricObstacle (foldr1 (<+>) (triangleCenter . triangles) </> realToFrac (length triangles)) triangles
+annotateObstacle obstacleTriangles = GeometricObstacle{obstacleSphere=Sphere{..}, ..}
+  where
+    sphereCenter = foldr1 (<+>) (triangleCenter . obstacleTriangles) </> realToFrac (length obstacleTriangles)
+    sphereSquaredRadius = maximum $ squaredDistance sphereCenter . (obstacleTriangles >>= tupleToList . triangleVertices)
 
 behind :: V → Plane → Bool
 behind v Plane{..} = sameDirection (planePoint <-> v) planeNormal

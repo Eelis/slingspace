@@ -1,26 +1,45 @@
 {-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell #-}
 
-module TerrainGenerator (Cache(..), start, defaultConfig, flatten) where
+module TerrainGenerator (Cache(..), start, defaultConfig, flatten, sectorId, SectorId, cubeSize, bytesPerVertex, totalVertices, sectors, totalBytes, bytesPerSector, doublesPerVector, bytesPerDouble) where
 
-import Data.Function (fix)
+import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
-import Control.Concurrent.STM (newTVarIO, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar)
+import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL (GLdouble, GLfloat, Vector3(..), Color4(..))
-import Math ((<+>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..))
+import Math ((<+>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod, Sphere(..))
 import Data.Bits (xor)
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, liftM3, forM, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
-import Data.List ((\\))
+import Data.List (sortBy)
 import MyUtil ((.), tupleToList)
 import Prelude hiding ((.))
 import Control.DeepSeq (deepseq, NFData(..))
 import Data.DeriveTH
-import Data.Array.Storable
+import Data.Array.Storable (StorableArray, MArray, newListArray)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import Data.Map (Map)
+import Data.Set (Set)
+
+cubeSize, bytesPerSector, bytesPerVertex, vectorsPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, doublesPerVector, bytesPerDouble :: Num a ⇒ a
+cubeSize = 7
+sectors = cubeSize^3
+obstaclesPerSector = 50
+trianglesPerObstacle = 4
+verticesPerTriangle = 3
+verticesPerSector = verticesPerTriangle * trianglesPerObstacle * obstaclesPerSector
+vectorsPerVertex = 2
+doublesPerVector = 3
+bytesPerDouble = 8
+bytesPerVertex = vectorsPerVertex * doublesPerVector * bytesPerDouble
+bytesPerSector = bytesPerVertex * verticesPerSector
+totalVertices = verticesPerSector * sectors
+totalBytes = totalVertices * bytesPerVertex
 
 data Config = Config
   { sectorSize :: GLdouble
-  , obstaclesPerSector :: Int }
+  {-, obstaclesPerSector :: Int-} }
 
 type SectorId = Vector3 Integer
 
@@ -28,9 +47,7 @@ data Sector = Sector
   { obstacles :: [VisualObstacle]
   , sectorVertices :: StorableArray Int GLdouble }
 
-data Cache = Cache
-  { currentSector :: SectorId
-  , storedSectors :: [(SectorId, Sector)] }
+type Cache = Map SectorId Sector
 
 instance NFData GLdouble
 instance NFData GLfloat
@@ -42,10 +59,10 @@ $( derive makeNFData ''AnnotatedTriangle )
 $( derive makeNFData ''GeometricObstacle )
 $( derive makeNFData ''VisualObstacle )
 $( derive makeNFData ''Sector )
-$( derive makeNFData ''Cache )
+$( derive makeNFData ''Sphere )
 
 emptyCache :: Cache
-emptyCache = Cache{currentSector = Vector3 (-1) (-1) (-1), storedSectors = []}
+emptyCache = Map.empty
 
 vectorComponents :: Vector3 a → [a]
 vectorComponents (Vector3 x y z) = [x, y, z]
@@ -73,20 +90,14 @@ buildSector Config{..} (Vector3 x y z) = do
   sectorVertices ← flatten obstacles
   return Sector{..}
 
-updateMap :: Config → SectorId → Cache → IO Cache
-updateMap config newSector@(Vector3 x y z) oldCache@Cache{..}
-  | newSector == currentSector = return oldCache
-  | otherwise = do
-    n ← mapM (\s → do sec ← buildSector config s; return (s, sec)) sectorsToAdd
-    return $ Cache
-      { currentSector = newSector
-      , storedSectors = filter ((`elem` sectorsWeWant) . fst) storedSectors ++ n }
-  where
-    sectorsWeWant = [Vector3 x' y' z' | x' ← [x - 3 .. x + 3], y' ← [y - 3 .. y + 3], z' ← [z - 3 .. z + 3]]
-    sectorsToAdd = sectorsWeWant \\ fst . storedSectors
+ball :: Set SectorId
+ball = Set.fromAscList $
+  sortBy (compare `on` (\v → inner_prod v v)) [v |  v ← liftM3 Vector3 cc cc cc, inner_prod v v <= 9]
+cc :: [Integer]
+cc = [0,1,-1,2,-2,3,-3,4,-4,5,-5,6,-6]
 
 defaultConfig :: Config
-defaultConfig = Config { sectorSize = 3000, obstaclesPerSector = 8 }
+defaultConfig = Config { sectorSize = 7000 {-, obstaclesPerSector = 50-} }
 
 sectorId :: Config → V → SectorId
 sectorId Config{..} (Vector3 x y z) = Vector3 (round (x / sectorSize)) (round (y / sectorSize)) (round (z / sectorSize))
@@ -94,27 +105,28 @@ sectorId Config{..} (Vector3 x y z) = Vector3 (round (x / sectorSize)) (round (y
 distance :: SectorId → SectorId → Integer
 distance (Vector3 x y z) (Vector3 x' y' z') = maximum $ abs . [x - x', y - y', z - z']
 
-start :: Config → IO (V → IO ([GeometricObstacle], [StorableArray Int GLdouble]))
+start :: Config → IO (TChan (SectorId, StorableArray Int GLdouble), V → IO [GeometricObstacle])
 start config = do
+  toBuffer ← newTChanIO
   queue ← newEmptyTMVarIO
   let initialCache = emptyCache
   mp ← newTVarIO initialCache
-  forkIO $ flip fix initialCache $ \loop oldMap@Cache{..} → do
+  forkIO $ flip fix initialCache $ \loop storedSectors → do
     newSector ← atomically (sectorId config . takeTMVar queue)
-    if newSector /= currentSector
-      then do
-        newMap ← updateMap config newSector oldMap
-        putStrLn "starting deepseq..."
-        deepseq newMap $ do
-        putStrLn "seq'd, committing..."
-        atomically $ writeTVar mp newMap
-        putStrLn "committed, looping..."
-        loop newMap
-      else loop oldMap
-  return $ \v → do
+    let sectorsWeWant = Set.map{-Monotonic-} (<+> newSector) ball
+    foldM (\ss sid → do
+      y ← buildSector config sid
+      deepseq y $ do
+      let n = Map.insert sid y ss
+      atomically $ writeTChan toBuffer (sid, sectorVertices y) >> writeTVar mp n
+      return n)
+      (Map.filterWithKey (\k _ → k `Set.member` sectorsWeWant) storedSectors)
+      (Set.toList (Set.difference sectorsWeWant (Map.keysSet storedSectors)))
+        >>= loop
+  return (toBuffer, \v → do
     atomically $ do
       tryTakeTMVar queue
       putTMVar queue v
-    Cache{..} ← readTVarIO mp
-    let shootableObstacles = geometricObstacle . (filter (\(s, _) → distance s currentSector <= 1) storedSectors >>= (obstacles . snd))
-    return (shootableObstacles, sectorVertices . snd . storedSectors)
+    storedSectors ← readTVarIO mp
+    let shootableObstacles = geometricObstacle . (filter (\(s, _) → distance s (sectorId config v) <= 1) (Map.toList storedSectors) >>= (obstacles . snd))
+    return shootableObstacles)
