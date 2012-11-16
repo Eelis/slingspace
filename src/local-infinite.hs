@@ -5,11 +5,11 @@ import qualified Gui
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
-import Math ((<->), AnnotatedObstacle(..), norm_2, Ray(..))
+import Math ((<->), VisualObstacle(..), GeometricObstacle(..), norm_2, Ray(..))
 import Control.Monad.Fix (fix)
 import MyGL ()
 import MyUtil ((.), omni_map, read_config_file)
-import Graphics.UI.GLUT (GLdouble, Vector3(..))
+import Graphics.UI.GLUT (GLdouble, Vector3(..), Color4(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
@@ -30,7 +30,7 @@ omni_mapje p f (h:t) = (h' : t')
     t' = omni_mapje (h' : p) f t
     h' = f h t' p
 
-to_graphnodes :: [AnnotatedObstacle] → [GraphNode]
+to_graphnodes :: [GeometricObstacle] → [GraphNode]
 to_graphnodes = omni_map GraphNode
 
 myzip :: [a] → [a] → [a]
@@ -59,6 +59,8 @@ to_graphnodes os = f os []
 
 --to_graphnodes = omni_map (\ao gns → GraphNode ao $ take 10 gns)
 
+visualize :: GeometricObstacle -> VisualObstacle
+visualize g = VisualObstacle g (Color4 0.9 0.9 0.9 1)
 
 main :: IO ()
 main = do
@@ -68,19 +70,20 @@ main = do
   --t ← fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
   --putStr $ unlines $ take 100 (show . $(project 0) . t)
 
-  atunnel :: [AnnotatedObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
+  gtunnel :: [GeometricObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
+  
   let
-    tunnel = to_graphnodes atunnel
+    tunnel = to_graphnodes gtunnel
     closest = head tunnel
     initialPosition = (Vector3 0 1800 1000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
-    path = iterate (tick_player atunnel gp_cfg)
+    path = iterate (tick_player gtunnel gp_cfg)
 
     makeState :: [Player] -> Gui.State
     makeState p = Gui.State
       { players = Map.singleton name p
-      , shootableObstacles = atunnel
-      , visibleObstacles = atunnel
+      , shootableObstacles = gtunnel
+      , visibleObstacles = map visualize gtunnel
       }
 
     makeController :: [Player] -> Gui.Controller

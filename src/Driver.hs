@@ -5,7 +5,7 @@ import qualified Gui
 import qualified Logic
 import qualified Data.Map as Map
 import Logic (Player(..), GameplayConfig, tick_player, Gun)
-import Math (Ray(..), V, AnnotatedObstacle)
+import Math (Ray(..), V, VisualObstacle(..))
 import Data.Function (fix)
 import MyGL ()
 import MyUtil ((.), read_config_file)
@@ -23,7 +23,7 @@ data Static = Static
 
 data State = State
   { player :: Player
-  , obstacles :: [AnnotatedObstacle] }
+  , obstacles :: [VisualObstacle] }
 
 data Controller = Controller
   { state :: State
@@ -35,7 +35,7 @@ data Controller = Controller
 guiState :: State → Gui.State
 guiState State{..} = Gui.State
   { players = Map.singleton name [player]
-  , shootableObstacles = obstacles
+  , shootableObstacles = geometricObstacle . obstacles
   , visibleObstacles = obstacles }
 
 guiController :: Controller → Gui.Controller
@@ -50,7 +50,7 @@ control :: Static → State → Controller
 control Static{..} = go where
   go state@State{..} = Controller
     { tick = do
-        let newPlayer = tick_player obstacles gameplayConfig player
+        let newPlayer = tick_player (geometricObstacle . obstacles) gameplayConfig player
         informGenerator $ rayOrigin $ body newPlayer
         newObs ← snd . getObstacles
         return $ go $ State newPlayer newObs

@@ -5,9 +5,9 @@ module Gui (Controller(..), State(..), gui) where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4, GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
+import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles, AnnotatedObstacle)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles, GeometricObstacle, VisualObstacle(..))
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -29,7 +29,6 @@ data Scheme = Scheme
   , fog_density :: GLfloat
   , fog_color, left_gun_color, right_gun_color :: Color4 GLclampf
   , lightModel_ambient
-  , obstacle_material_ambient, obstacle_material_diffuse
   , ballLight_ambient, ballLight_diffuse
   , ball_material_ambient, ball_material_diffuse :: Color4 GLfloat
   , ballLight_attenuation :: (GLfloat, GLfloat, GLfloat)
@@ -85,8 +84,8 @@ type ClientState = Map Gun ClientGunState
 
 data State = State
   { players :: Map String [Player]
-  , shootableObstacles :: [AnnotatedObstacle]
-  , visibleObstacles :: [AnnotatedObstacle] }
+  , shootableObstacles :: [GeometricObstacle]
+  , visibleObstacles :: [VisualObstacle] }
 
 data Controller = Controller
   { state :: State
@@ -116,10 +115,10 @@ onDisplay State{..} myname Camera{..} clientState = do
   whenJust (Map.lookup myname players) $ \(me:_) → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers (head . players)
-  drawObstacles (visibleObstacles >>= obstacleTriangles)
+  drawObstacles visibleObstacles
   lift $ lighting $= Disabled
   -- lift $ drawFutures players
-  drawFloor (visibleObstacles >>= obstacleTriangles) me
+  drawFloor (geometricObstacle . visibleObstacles >>= obstacleTriangles) me
   drawRopes (head . players)
   drawCrossHairs clientState
   lift swapBuffers
@@ -272,13 +271,14 @@ drawRopes players = do
         vertex $ tov $ rayOrigin rope_ray
   return ()
 
-drawObstacles :: [AnnotatedTriangle] → Gui ()
-drawObstacles visible_obs = do
+drawObstacles :: [VisualObstacle] → Gui ()
+drawObstacles obstacles = do
   Scheme{..} ← asks scheme
+  forM_ obstacles $ \VisualObstacle{..} → do
   lift $ do
-  GLUT.materialAmbient Front $= obstacle_material_ambient
-  GLUT.materialDiffuse Front $= obstacle_material_diffuse
-  GLUT.renderPrimitive Triangles $ forM_ visible_obs $ \AnnotatedTriangle{..} → do
+  GLUT.materialAmbient Front $= obstacleColor
+  GLUT.materialDiffuse Front $= Color4 1 1 1 1
+  GLUT.renderPrimitive Triangles $ forM_ (obstacleTriangles geometricObstacle) $ \AnnotatedTriangle{..} → do
     GLUT.normal $ vectorToNormal triangleNormal
     mapM (vertex . tov) $ tupleToList triangleVertices
 

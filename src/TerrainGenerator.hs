@@ -7,9 +7,9 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTChanIO, newTVarIO, atomically, writeTChan, readTChan, writeTVar, readTVarIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL hiding (Plane)
-import Math ((<+>), AnnotatedObstacle, V)
+import Math ((<+>), V, VisualObstacle(..))
 import Data.Bits (xor)
-import Control.Monad (replicateM, when)
+import Control.Monad (replicateM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
 import MyUtil ((.))
 import Prelude hiding ((.))
@@ -20,17 +20,21 @@ data WorldConfig = WorldConfig
 
 type Sector = (Integer, Integer)
 
-type TerrainCache = (Sector, [AnnotatedObstacle])
+type TerrainCache = (Sector, [VisualObstacle])
 
 emptyMap :: TerrainCache
 emptyMap = ((-1, -1), [])
 
-obstaclesAround :: WorldConfig → Sector → [AnnotatedObstacle]
-obstaclesAround WorldConfig{..} (x, z) = evalRand
-    (replicateM obstaclesPerSector $ do
-      c ← getRandomR (Vector3 (-halfSectorSize) 500 (-halfSectorSize), Vector3 halfSectorSize 2000 halfSectorSize)
-      randomObs (c <+> Vector3 (fromInteger x * sectorSize) 0 (fromInteger z * sectorSize)) 800) (mkStdGen (fromInteger $ xor x z))
-  where halfSectorSize = sectorSize / 2
+obstaclesAround :: WorldConfig → Sector → [VisualObstacle]
+obstaclesAround WorldConfig{..} (x, z) = evalRand f $ mkStdGen $ fromInteger $ xor x z
+  where
+    halfSectorSize = sectorSize / 2
+    f = do
+      obstacleColor ← getRandomR (Color4 0.5 0.5 0.5 1, Color4 1 1 1 1)
+      replicateM obstaclesPerSector $ do
+        c ← getRandomR (Vector3 (-halfSectorSize) 500 (-halfSectorSize), Vector3 halfSectorSize 2000 halfSectorSize)
+        geometricObstacle ← randomObs (c <+> Vector3 (fromInteger x * sectorSize) 0 (fromInteger z * sectorSize)) 800
+        return VisualObstacle{..}
 
 updateMap :: WorldConfig → Sector → TerrainCache → TerrainCache
 updateMap worldConfig updatedPosition old@(oldPos, _)
