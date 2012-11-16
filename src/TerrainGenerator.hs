@@ -15,7 +15,6 @@ import Data.List (sortBy)
 import MyUtil ((.), tupleToList)
 import Prelude hiding ((.))
 import Control.DeepSeq (deepseq, NFData(..))
-import Data.DeriveTH
 import Data.Array.Storable (StorableArray, MArray, newListArray)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -53,14 +52,7 @@ type Cache = Map SectorId Sector
 instance NFData CFloat
 instance NFData CDouble
 instance NFData (StorableArray a b)
-
-$( derive makeNFData ''Vector3 )
-$( derive makeNFData ''Color4 )
-$( derive makeNFData ''AnnotatedTriangle )
-$( derive makeNFData ''GeometricObstacle )
-$( derive makeNFData ''VisualObstacle )
-$( derive makeNFData ''Sector )
-$( derive makeNFData ''Sphere )
+instance NFData Sector
 
 emptyCache :: Cache
 emptyCache = Map.empty
