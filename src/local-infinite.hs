@@ -2,14 +2,13 @@
 
 import Gui (gui)
 import qualified Gui
-import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
-import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
+import Logic (Player(..), GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
-import Math ((<->), VisualObstacle(..), GeometricObstacle(..), norm_2, Ray(..))
+import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..))
 import Control.Monad.Fix (fix)
 import MyGL ()
 import MyUtil ((.), omni_map, read_config_file)
-import Graphics.UI.GLUT (GLdouble, Vector3(..), Color4(..))
+import Graphics.UI.GLUT (Vector3(..), Color4(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
@@ -38,27 +37,6 @@ myzip [] x = x
 myzip x [] = x
 myzip (h:t) (h':t') = h:h':myzip t t'
 
-{-to_graphnodes :: [AnnotatedObstacle] → [GraphNode]
-to_graphnodes os = f os []
-  where
-    f :: [AnnotatedObstacle] → [GraphNode] → [GraphNode]
-    f [] _ = []
-    f (h:t) prev = h' : t'
-      where
-        t' :: [GraphNode]
-        t' = f t (h' : prev)
-        h' :: GraphNode
-        h' = GraphNode h (myzip t' prev)-}
-      
-
--- to_graphnodes = omni_mapje [] (\ao before after →
---   let x = unsafePerformIO (putStrLn "dus.." >> return 3)
---   in if x == 0 then undefined else GraphNode ao (interleave before after))
-
---to_graphnodes = omni_mapje [] (\ao before after → GraphNode ao (interleave before after))
-
---to_graphnodes = omni_map (\ao gns → GraphNode ao $ take 10 gns)
-
 visualize :: GeometricObstacle -> VisualObstacle
 visualize g = VisualObstacle g (Color4 0.9 0.9 0.9 1)
 
@@ -66,9 +44,6 @@ main :: IO ()
 main = do
   tu_cfg ← read_config_file "infinite-tunnel.txt"
   gp_cfg ← read_config_file "gameplay.txt"
-
-  --t ← fst . readRngMonad (infinite_tunnel tu_cfg) . getStdGen
-  --putStr $ unlines $ take 100 (show . $(project 0) . t)
 
   gtunnel :: [GeometricObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
   
