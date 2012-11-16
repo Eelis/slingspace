@@ -1,10 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
-import Gui (gui, GuiCallbacks(..))
+import Gui (gui)
+import qualified Gui
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
 import Math ((<->), AnnotatedObstacle(..), norm_2, Ray(..))
+import Control.Monad.Fix (fix)
 import MyGL ()
 import MyUtil ((.), omni_map, read_config_file)
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
@@ -15,19 +17,6 @@ import Control.Monad.Random (evalRandIO)
 
 name :: String
 name = "Player"
-
-data State = State (IORef [Player]) GameplayConfig [AnnotatedObstacle]
-
-makeCallbacks :: State -> GuiCallbacks
-makeCallbacks (State p c a) = GuiCallbacks{..}
-  where
-    cc_tick = modifyIORef p tail
-    cc_spawn = return ()
-    cc_release g = modifyIORef p $ iterate (tick_player a c) . release g . head
-    cc_fire g v = modifyIORef p $ iterate (tick_player a c) . fire c g v . head
-    cc_players = Map.singleton name . readIORef p
-    cc_visible_obstacles = return a
-    cc_shootable_obstacles = return a
 
 interleave :: [a] → [a] → [a]
 interleave [] x = x
@@ -70,6 +59,7 @@ to_graphnodes os = f os []
 
 --to_graphnodes = omni_map (\ao gns → GraphNode ao $ take 10 gns)
 
+
 main :: IO ()
 main = do
   tu_cfg ← read_config_file "infinite-tunnel.txt"
@@ -79,8 +69,27 @@ main = do
   --putStr $ unlines $ take 100 (show . $(project 0) . t)
 
   atunnel :: [AnnotatedObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
-  let tunnel = to_graphnodes atunnel
-  --print $ length $ take 100000 bla
-  let closest = head tunnel
-  p ← newIORef $ iterate (tick_player atunnel gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False
-  gui (makeCallbacks (State p gp_cfg atunnel)) name gp_cfg
+  let
+    tunnel = to_graphnodes atunnel
+    closest = head tunnel
+    initialPosition = (Vector3 0 1800 1000)
+    initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
+    path = iterate (tick_player atunnel gp_cfg)
+
+    makeState :: [Player] -> Gui.State
+    makeState p = Gui.State
+      { players = Map.singleton name p
+      , shootableObstacles = atunnel
+      , visibleObstacles = atunnel
+      }
+
+    makeController :: [Player] -> Gui.Controller
+    makeController p = fix $ \self -> Gui.Controller
+      { state = makeState p
+      , tick = do
+        return $ makeController (tail p)
+      , release = \g -> return $ makeController $ path $ release g $ head p
+      , fire = \g v -> return $ makeController $ path $ fire gp_cfg g v $ head p
+      , spawn = return self }
+
+  gui (makeController $ path initialPlayer) name gp_cfg
