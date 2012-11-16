@@ -8,13 +8,11 @@ import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..))
 import Control.Monad.Fix (fix)
 import MyGL ()
 import MyUtil ((.), read_config_file)
-import Graphics.UI.GLUT (Vector3(..), Color4(..), ($=))
-import qualified Graphics.UI.GLUT as GLUT
+import Graphics.UI.GLUT (Vector3(..), Color4(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
 import Control.Monad.Random (evalRandIO)
-import Data.Array.Storable (withStorableArray)
 import qualified TerrainGenerator
 
 name :: String
@@ -45,14 +43,9 @@ main = do
     makeController :: [Player] -> Gui.Controller
     makeController p = fix $ \self -> Gui.Controller
       { state = makeState p
-      , tick = \obstacleBuffer -> do
-          GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-          withStorableArray atunnel $
-            GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0 TerrainGenerator.bytesPerSector
-
-          return $ makeController (tail p)
-      , release = \g -> return $ makeController $ path $ release g $ head p
-      , fire = \g v -> return $ makeController $ path $ fire gp_cfg g v $ head p
-      , spawn = return self }
+      , tick = return (Just (0, atunnel), makeController (tail p))
+      , release = \g -> makeController $ path $ release g $ head p
+      , fire = \g v -> makeController $ path $ fire gp_cfg g v $ head p
+      , spawn = self }
 
   gui (makeController $ path initialPlayer) name gp_cfg

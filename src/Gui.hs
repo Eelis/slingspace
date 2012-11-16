@@ -21,6 +21,7 @@ import Prelude hiding ((.))
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
 import TerrainGenerator (sectorCenter, bytesPerVertex, totalVertices, totalBytes, bytesPerDouble, doublesPerVector, sectorId)
+import Data.Array.Storable (StorableArray, withStorableArray)
 import qualified TerrainGenerator
 
 type SectorId = Vector3 Integer
@@ -98,10 +99,10 @@ data State = State
 
 data Controller = Controller
   { state :: State
-  , tick :: GLUT.BufferObject → IO Controller
-  , release :: Gun → IO Controller
-  , fire :: Gun → V → IO Controller
-  , spawn :: IO Controller }
+  , tick :: IO (Maybe (Integer, StorableArray Int GLdouble), Controller)
+  , release :: Gun → Controller
+  , fire :: Gun → V → Controller
+  , spawn :: Controller }
 
 initialClientState :: ClientState
 initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
@@ -145,7 +146,7 @@ onReshape CameraConfig{..} s@(GLUT.Size w h) = do
 onInput :: GuiConfig → IORef ClientState → IORef Bool → IORef Camera → IORef Position → Key → KeyState → a → b → Controller → IO Controller
 onInput GuiConfig{camConf=camConf@CameraConfig{..}, ..} clientStateRef pauseRef cameraRef cursorPos b bs _ _ controller@Controller{..} =
   case () of
-    _| k == restart_key → spawn
+    _| k == restart_key → return spawn
     _| k == pause_key → togglePause camConf pauseRef cameraRef cursorPos >> return controller
     _| k == exit_key → exitWith ExitSuccess
     _| k == zoom_in_key → do
@@ -167,7 +168,7 @@ onInput GuiConfig{camConf=camConf@CameraConfig{..}, ..} clientStateRef pauseRef 
   fire_asap_a = modifyIORef clientStateRef . Map.adjust (\g → g { fire_state = FireAsap })
   release_a u = do
     modifyIORef clientStateRef (Map.adjust (\g → g { fire_state = Idle }) u)
-    release u
+    return $ release u
 
 onMotion :: CameraConfig → IORef Camera → IORef Position → Position → IO ()
 onMotion CameraConfig{..} cameraRef cursorPosRef p@(Position x y) = do
@@ -445,9 +446,17 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig c
         case v of
           ClientGunState (Just t) FireAsap → do
             modifyIORef clientStateRef $ Map.adjust (\g → g { fire_state = Fired }) k
-            fire gs k t
+            return $ fire gs k t
           _ → return gs)
           controller
           (Map.toList clientState)
       GLUT.postRedisplay Nothing
-      tick newController obstacleBuffer
+      (mx, c) <- tick newController
+      case mx of
+        Nothing -> return ()
+        Just (i, a) -> do
+          GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
+          withStorableArray a $
+            GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer
+              (fromInteger $ i * TerrainGenerator.bytesPerSector) TerrainGenerator.bytesPerSector
+      return c

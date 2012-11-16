@@ -8,14 +8,14 @@ import Graphics.Rendering.OpenGL.GL (GLdouble)
 import Logic (Player(..), GameplayConfig, tickPlayer, Gun)
 import Math (Ray(..), V, GeometricObstacle)
 import Data.Function (fix)
+import Control.Arrow (first, second)
 import MyGL ()
 import MyUtil ((.), read_config_file)
-import qualified Graphics.UI.GLUT as GLUT
-import Graphics.UI.GLUT (Vector3(..), ($=))
+import Graphics.UI.GLUT (Vector3(..))
 import Prelude hiding ((.))
 import qualified TerrainGenerator
 import TerrainGenerator (cubeSize)
-import Data.Array.Storable (StorableArray, withStorableArray)
+import Data.Array.Storable (StorableArray)
 import Control.Concurrent.STM (STM, isEmptyTChan, atomically, TChan, readTChan)
 
 name :: String
@@ -32,10 +32,10 @@ data State = State
 
 data Controller = Controller
   { state :: State
-  , tick :: GLUT.BufferObject → IO Controller
-  , release :: Gun → IO Controller
-  , fire :: Gun → V → IO Controller
-  , spawn :: IO Controller }
+  , tick :: IO (Maybe (Integer, StorableArray Int GLdouble), Controller)
+  , release :: Gun → Controller
+  , fire :: Gun → V → Controller
+  , spawn :: Controller }
 
 guiState :: State → Gui.State
 guiState State{..} = Gui.State{ players = Map.singleton name [player], .. }
@@ -43,10 +43,10 @@ guiState State{..} = Gui.State{ players = Map.singleton name [player], .. }
 guiController :: Controller → Gui.Controller
 guiController Controller{..} = fix $ \self → Gui.Controller
   { state = guiState state
-  , tick = \b → guiController . tick b
-  , release = \g → guiController . release g
-  , fire = \g v → guiController . fire g v
-  , spawn = return self }
+  , tick = second guiController . tick
+  , release = guiController . release
+  , fire = \g v → guiController (fire g v)
+  , spawn = self }
 
 type SectorId = Vector3 Integer
 
@@ -62,7 +62,7 @@ maybeReadTChan c = do
 control :: Static → State → Controller
 control Static{..} = go where
   go state@State{..} = Controller
-    { tick = \obstacleBuffer → do
+    { tick = do
         let
           newPlayer = tickPlayer shootableObstacles gameplayConfig player
           oldSector = TerrainGenerator.sectorId TerrainGenerator.defaultConfig $ rayOrigin $ body player
@@ -70,20 +70,13 @@ control Static{..} = go where
         if newSector == oldSector
           then do
             m ← atomically $ maybeReadTChan toBuffer
-            case m of
-              Nothing → return ()
-              Just (sid, array) → do
-                GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-                withStorableArray array $
-                  GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer
-                    (fromInteger $ sectorIndex sid * TerrainGenerator.bytesPerSector) TerrainGenerator.bytesPerSector
-            return $ go $ state{player=newPlayer}
+            return (first sectorIndex . m, go $ state{player=newPlayer})
           else do
             newShootableObstacles ← contactGenerator $ rayOrigin $ body newPlayer
-            return $ go $ State newPlayer newShootableObstacles
-    , fire = \g v → return $ go state{player = Logic.fire gameplayConfig g v player}
-    , release = \g → return $ go state{player = Logic.release g player}
-    , spawn = return $ go state
+            return (Nothing, go $ State newPlayer newShootableObstacles)
+    , fire = \g v → go state{player = Logic.fire gameplayConfig g v player}
+    , release = \g → go state{player = Logic.release g player}
+    , spawn = go state
     , .. }
 
 main :: IO ()
