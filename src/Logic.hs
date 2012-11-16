@@ -19,7 +19,7 @@ import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
 import Data.List (sortBy)
 import MyGL ()
-import MyUtil ((.), minimumByMeasure)
+import MyUtil ((.))
 import Data.Maybe (mapMaybe)
 import Control.Monad.Fix (fix)
 import TupleProjection (project)
@@ -93,9 +93,6 @@ tick_player collidable cfg p = if dead p then p else
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
-
--- obstacles_around :: Player → [GeometricObstacle]
--- obstacles_around = (gn_obst .) . neighbourhood . closest_obstacle
 
 find_target :: [GeometricObstacle] → Player → GameplayConfig → Ray → Maybe V
 find_target shootableObstacles player lcfg@GameplayConfig{..} gunRay =

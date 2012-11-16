@@ -13,6 +13,7 @@ import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
 import Control.Monad.Random (evalRandIO)
+import qualified TerrainGenerator
 
 name :: String
 name = "Player"
@@ -49,6 +50,9 @@ main = do
   
   let
     tunnel = to_graphnodes gtunnel
+    vtunnel = map visualize gtunnel
+  atunnel <- TerrainGenerator.flatten vtunnel
+  let
     closest = head tunnel
     initialPosition = (Vector3 0 1800 1000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
@@ -58,7 +62,7 @@ main = do
     makeState p = Gui.State
       { players = Map.singleton name p
       , shootableObstacles = gtunnel
-      , visibleObstacles = map visualize gtunnel
+      , visibleObstacles = [atunnel]
       }
 
     makeController :: [Player] -> Gui.Controller
@@ -69,5 +73,6 @@ main = do
       , release = \g -> return $ makeController $ path $ release g $ head p
       , fire = \g v -> return $ makeController $ path $ fire gp_cfg g v $ head p
       , spawn = return self }
+
 
   gui (makeController $ path initialPlayer) name gp_cfg

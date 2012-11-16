@@ -19,6 +19,8 @@ import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
 import Prelude hiding ((.))
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
+import Data.Array.Storable
+import Foreign.Ptr (plusPtr)
 
 -- Configuration:
 
@@ -85,7 +87,7 @@ type ClientState = Map Gun ClientGunState
 data State = State
   { players :: Map String [Player]
   , shootableObstacles :: [GeometricObstacle]
-  , visibleObstacles :: [VisualObstacle] }
+  , visibleObstacles :: [StorableArray Int GLdouble] }
 
 data Controller = Controller
   { state :: State
@@ -118,7 +120,7 @@ onDisplay State{..} myname Camera{..} clientState = do
   drawObstacles visibleObstacles
   lift $ lighting $= Disabled
   -- lift $ drawFutures players
-  drawFloor (geometricObstacle . visibleObstacles >>= obstacleTriangles) me
+  --drawFloor (geometricObstacle . visibleObstacles >>= obstacleTriangles) me
   drawRopes (head . players)
   drawCrossHairs clientState
   lift swapBuffers
@@ -271,16 +273,22 @@ drawRopes players = do
         vertex $ tov $ rayOrigin rope_ray
   return ()
 
-drawObstacles :: [VisualObstacle] → Gui ()
-drawObstacles obstacles = do
+drawObstacles :: [StorableArray Int GLdouble] → Gui ()
+drawObstacles ars = do
   Scheme{..} ← asks scheme
-  forM_ obstacles $ \VisualObstacle{..} → do
   lift $ do
-  GLUT.materialAmbient Front $= obstacleColor
   GLUT.materialDiffuse Front $= Color4 1 1 1 1
-  GLUT.renderPrimitive Triangles $ forM_ (obstacleTriangles geometricObstacle) $ \AnnotatedTriangle{..} → do
-    GLUT.normal $ vectorToNormal triangleNormal
-    mapM (vertex . tov) $ tupleToList triangleVertices
+  GLUT.materialAmbient Front $= Color4 0.4 0.6 0.8 1
+  GLUT.clientState GLUT.VertexArray $= Enabled
+  GLUT.clientState GLUT.NormalArray $= Enabled
+  forM_ ars $ \a → do
+    (_, n) ← getBounds a
+    withStorableArray a $ \p → do
+    GLUT.arrayPointer GLUT.VertexArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double (6*8) p
+    GLUT.arrayPointer GLUT.NormalArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double (6*8) (plusPtr p (3*8))
+    GLUT.drawArrays Triangles 0 (fromIntegral $ n`div`6)
+  GLUT.clientState GLUT.VertexArray $= Disabled
+  GLUT.clientState GLUT.NormalArray $= Disabled
 
 drawPlayers :: Map String Player → Gui ()
 drawPlayers players = do

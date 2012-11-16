@@ -112,3 +112,13 @@ instance Read Key where
            [((MouseButton aa) , rest) | ("MouseButton" , inp) ← lex inp ,
         (aa , rest) ← readsPrec 10 inp])
           input
+
+glDouble :: Double → GLdouble
+glFloat :: Float → GLfloat
+glDouble = realToFrac
+glFloat = realToFrac
+unGLdouble :: GLdouble → Double
+unGLfloat :: GLfloat → Float
+unGLdouble = realToFrac
+unGLfloat = realToFrac
+-- Todo: These are horrible.
