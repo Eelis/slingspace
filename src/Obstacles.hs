@@ -9,12 +9,10 @@ module Obstacles
 
 import MyUtil ((.), bounded)
 import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
-import MyGL (glFloat, glDouble, unGLfloat, unGLdouble)
 import Control.Monad (replicateM)
 import Graphics.UI.GLUT
 import Prelude hiding ((.))
-import Control.Arrow (first)
-import Control.Monad.Random (MonadRandom(..), Random(..))
+import Control.Monad.Random (MonadRandom(..))
 
 {-
 aboveSurface :: (Ord a, Floating a) ⇒ Vector3 a → Bool
@@ -91,14 +89,6 @@ data InfiniteTunnelConfig = InfiniteTunnelConfig
   , obstacle_size, init_tunnel_width, max_tunnel_width, min_tunnel_width :: GLdouble
   } deriving (Show, Read)
 -}
-
-instance Random GLfloat where
-  randomR (lo, hi) = first glFloat . randomR (unGLfloat lo, unGLfloat hi)
-  random = first glFloat . random
-
-instance Random GLdouble where
-  randomR (lo, hi) = first glDouble . randomR (unGLdouble lo, unGLdouble hi)
-  random = first glDouble . random
 
 infinite_tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [(V, V, GeometricObstacle)]
 infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Vector3 0 0 0) {- from -}

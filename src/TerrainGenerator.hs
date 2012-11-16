@@ -6,10 +6,10 @@ import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
-import Graphics.Rendering.OpenGL.GL (GLdouble, GLfloat, Vector3(..), Color4(..))
+import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..), Color4(..))
 import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod, Sphere(..))
 import Data.Bits (xor)
-import Control.Monad (replicateM, liftM3, forM, foldM)
+import Control.Monad (replicateM, liftM3, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
 import Data.List (sortBy)
 import MyUtil ((.), tupleToList)
@@ -21,6 +21,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Map (Map)
 import Data.Set (Set)
+import Foreign.C.Types (CFloat, CDouble)
 
 cubeSize, bytesPerSector, bytesPerVertex, vectorsPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, doublesPerVector, bytesPerDouble :: Num a ⇒ a
 cubeSize = 7
@@ -49,8 +50,8 @@ data Sector = Sector
 
 type Cache = Map SectorId Sector
 
-instance NFData GLdouble
-instance NFData GLfloat
+instance NFData CFloat
+instance NFData CDouble
 instance NFData (StorableArray a b)
 
 $( derive makeNFData ''Vector3 )
@@ -122,7 +123,7 @@ start config = do
     let sectorsWeWant = Set.map{-Monotonic-} (<+> newSector) ball
     foldM (\ss sid → do
       y ← buildSector config sid
-      --deepseq y $ do
+      deepseq y $ do
       let n = Map.insert sid y ss
       atomically $ writeTChan toBuffer (sid, sectorVertices y) >> writeTVar mp n
       return n)
