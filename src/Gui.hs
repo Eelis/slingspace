@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving #-}
 
 module Gui (Controller(..), State(..), gui) where
 
@@ -7,7 +7,7 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, vectorToNormal, Ray(..), obstacleTriangles, GeometricObstacle, VisualObstacle(..))
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, Ray(..), GeometricObstacle)
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -24,6 +24,11 @@ import TerrainGenerator (sectorCenter, bytesPerVertex, totalVertices, totalBytes
 import qualified TerrainGenerator
 
 type SectorId = Vector3 Integer
+
+deriving instance Read Key
+deriving instance Read KeyState
+deriving instance Read MouseButton
+deriving instance Read GLUT.SpecialKey
 
 -- Configuration:
 
@@ -286,7 +291,7 @@ drawRopes players = do
 
 drawOrientation :: Map String Player → Gui ()
 drawOrientation players = do
-  scheme@Scheme{..} ← asks scheme
+  Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
   GLUT.lineWidth $= rope_line_width
@@ -299,7 +304,7 @@ drawOrientation players = do
 
 drawSectorBorders :: Player → Gui ()
 drawSectorBorders Player{..} = do
-  scheme@Scheme{..} ← asks scheme
+  Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
   let u = sectorId TerrainGenerator.defaultConfig (rayOrigin body)

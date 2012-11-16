@@ -1,3 +1,4 @@
+{-# LANGUAGE UnicodeSyntax #-}
 
 module TupleProjection_TH (tuple_instances) where
   -- the top-level tuple_instances function needs to be defined in a separate module because of GHC's stage restriction

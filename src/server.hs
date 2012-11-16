@@ -1,3 +1,4 @@
+{-# LANGUAGE UnicodeSyntax #-}
 
 import Logic
 import Prelude hiding (catch, (.))

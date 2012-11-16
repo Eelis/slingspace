@@ -1,3 +1,4 @@
+{-# LANGUAGE UnicodeSyntax, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 
 module TupleProjection (project, project') where
 

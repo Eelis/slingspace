@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file

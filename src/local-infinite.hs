@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables #-}
 
 import Gui (gui)
 import qualified Gui

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 
 module Math where
 

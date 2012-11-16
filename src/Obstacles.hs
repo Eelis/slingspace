@@ -1,3 +1,5 @@
+{-# LANGUAGE UnicodeSyntax, TypeOperators #-}
+
 module Obstacles
   ( niceTunnel, bigField
   , infinite_tunnel
