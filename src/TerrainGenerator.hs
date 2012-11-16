@@ -1,32 +1,35 @@
 {-# LANGUAGE UnicodeSyntax, RecordWildCards #-}
 
-module TerrainGenerator where
+module TerrainGenerator (Cache(..), start, defaultConfig) where
 
 import Data.Function (fix)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTChanIO, newTVarIO, atomically, writeTChan, readTChan, writeTVar, readTVarIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL hiding (Plane)
-import Math ((<+>), V, VisualObstacle(..))
+import Math ((<+>), V, VisualObstacle(..), GeometricObstacle)
 import Data.Bits (xor)
 import Control.Monad (replicateM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
+import Data.List ((\\))
 import MyUtil ((.))
 import Prelude hiding ((.))
 
-data WorldConfig = WorldConfig
+data Config = Config
   { sectorSize :: GLdouble
   , obstaclesPerSector :: Int }
 
 type Sector = (Integer, Integer)
 
-type TerrainCache = (Sector, [VisualObstacle])
+data Cache = Cache
+  { currentSector :: Sector
+  , storedSectors :: [(Sector, [VisualObstacle])] }
 
-emptyMap :: TerrainCache
-emptyMap = ((-1, -1), [])
+emptyCache :: Cache
+emptyCache = Cache{currentSector = (-1, -1), storedSectors = []}
 
-obstaclesAround :: WorldConfig → Sector → [VisualObstacle]
-obstaclesAround WorldConfig{..} (x, z) = evalRand f $ mkStdGen $ fromInteger $ xor x z
+obstaclesAround :: Config → Sector → [VisualObstacle]
+obstaclesAround Config{..} (x, z) = evalRand f $ mkStdGen $ fromInteger $ xor x z
   where
     halfSectorSize = sectorSize / 2
     f = do
@@ -36,29 +39,41 @@ obstaclesAround WorldConfig{..} (x, z) = evalRand f $ mkStdGen $ fromInteger $ x
         geometricObstacle ← randomObs (c <+> Vector3 (fromInteger x * sectorSize) 0 (fromInteger z * sectorSize)) 800
         return VisualObstacle{..}
 
-updateMap :: WorldConfig → Sector → TerrainCache → TerrainCache
-updateMap worldConfig updatedPosition old@(oldPos, _)
-  | updatedPosition /= oldPos = (updatedPosition, obstaclesAround worldConfig updatedPosition)
-  | otherwise = old
+updateMap :: Config → Sector → Cache → Cache
+updateMap config newSector@(x, z) oldCache@Cache{..}
+  | newSector == currentSector = oldCache
+  | otherwise = Cache
+    { currentSector = newSector
+    , storedSectors = filter ((`elem` sectorsWeWant) . fst) storedSectors
+        ++ map (\s → (s, obstaclesAround config s)) (sectorsWeWant \\ fst . storedSectors) }
+  where
+    sectorsWeWant = [(x', z') | x' ← [x - 3 .. x + 3], z' ← [z - 3 .. z + 3]]
 
-defaultWorldConfig :: WorldConfig
-defaultWorldConfig = WorldConfig { sectorSize = 10000, obstaclesPerSector = 30 }
+defaultConfig :: Config
+defaultConfig = Config { sectorSize = 10000, obstaclesPerSector = 30 }
 
-sector :: WorldConfig → V → Sector
-sector WorldConfig{..} (Vector3 x _ z) = (round (x / sectorSize), round (z / sectorSize))
+sector :: Config → V → Sector
+sector Config{..} (Vector3 x _ z) = (round (x / sectorSize), round (z / sectorSize))
 
-startGenerator :: WorldConfig → IO (V → IO (), IO TerrainCache)
-startGenerator config = do
+distance :: Sector → Sector → Integer
+distance (x, z) (x', z') = max (x - x') (z - z')
+
+start :: Config → IO (V → IO ([GeometricObstacle], [VisualObstacle]))
+start config = do
   queue ← newTChanIO
-  let initialMap = emptyMap
-  mp ← newTVarIO initialMap
-  forkIO $ flip fix initialMap $ \loop oldMap@(oldSector, _) → do
+  let initialCache = emptyCache
+  mp ← newTVarIO initialCache
+  forkIO $ flip fix initialCache $ \loop oldMap@Cache{..} → do
     newSector ← atomically (sector config . readTChan queue)
-    if newSector /= oldSector
+    if newSector /= currentSector
       then do
         let newMap = updateMap config newSector oldMap
         -- Todo: Fully eval newMap here.
         atomically $ writeTVar mp newMap
         loop newMap
       else loop oldMap
-  return (atomically . writeTChan queue, readTVarIO mp)
+  return $ \v → do
+    atomically $ writeTChan queue v
+    Cache{..} ← readTVarIO mp
+    let shootableObstacles = geometricObstacle . (filter (\(s, _) → distance s currentSector <= 1) storedSectors >>= snd)
+    return (shootableObstacles, storedSectors >>= snd)
