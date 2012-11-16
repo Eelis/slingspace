@@ -1,4 +1,6 @@
-import Gui (gui, GuiCallback(..))
+{-# LANGUAGE RecordWildCards #-}
+
+import Gui (gui, GuiCallbacks(..))
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Logic (Player(..), GameplayConfig, GraphNode(..), release, fire, tick_player)
 import qualified Data.Map as Map
@@ -14,16 +16,18 @@ import Control.Monad.Random (evalRandIO)
 name :: String
 name = "Player"
 
-data LocalGuiCallback = LCC (IORef [Player]) GameplayConfig [AnnotatedObstacle]
+data State = State (IORef [Player]) GameplayConfig [AnnotatedObstacle]
 
-instance GuiCallback LocalGuiCallback where
-  cc_tick (LCC r _ _) = modifyIORef r tail
-  cc_spawn (LCC _ _ _) = return ()
-  cc_release (LCC p c a) g = modifyIORef p $ iterate (tick_player a c) . release g . head
-  cc_fire (LCC p c a) g v = modifyIORef p $ iterate (tick_player a c) . fire c g v . head
-  cc_players (LCC p _ _) = Map.singleton name . readIORef p
-  cc_visible_obstacles (LCC _ _ t) = return t
-  cc_shootable_obstacles (LCC _ _ t) = return t
+makeCallbacks :: State -> GuiCallbacks
+makeCallbacks (State p c a) = GuiCallbacks{..}
+  where
+    cc_tick = modifyIORef p tail
+    cc_spawn = return ()
+    cc_release g = modifyIORef p $ iterate (tick_player a c) . release g . head
+    cc_fire g v = modifyIORef p $ iterate (tick_player a c) . fire c g v . head
+    cc_players = Map.singleton name . readIORef p
+    cc_visible_obstacles = return a
+    cc_shootable_obstacles = return a
 
 interleave :: [a] → [a] → [a]
 interleave [] x = x
@@ -79,4 +83,4 @@ main = do
   --print $ length $ take 100000 bla
   let closest = head tunnel
   p ← newIORef $ iterate (tick_player atunnel gp_cfg) $ Player (Ray (Vector3 0 1800 1000) (Vector3 0 0 0)) Map.empty False
-  gui (LCC p gp_cfg atunnel) name gp_cfg
+  gui (makeCallbacks (State p gp_cfg atunnel)) name gp_cfg
