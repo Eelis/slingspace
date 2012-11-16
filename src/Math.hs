@@ -5,7 +5,7 @@ module Math where
 import Prelude hiding ((.))
 import MyGL ()
 import Graphics.Rendering.OpenGL.GL hiding (Plane)
-import Monad
+import Control.Monad
 import MyUtil ((.), tupleToList)
 import Data.Function (on)
 import Data.List (minimumBy)
