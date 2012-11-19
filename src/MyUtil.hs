@@ -18,7 +18,7 @@ import Foreign (Word16)
 import System.Environment (getArgs)
 import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, {-myThreadId,-} forkIO)
 import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
-import System.Posix.Clock (getTime, Clock(Monotonic), TimeSpec(..))
+import System.Clock (getTime, Clock(Monotonic), TimeSpec, sec, nsec)
 
 #ifdef linux_HOST_OS
 
@@ -113,7 +113,7 @@ getlineSR sr@(SockReader s br) = do
 foreign import ccall unsafe "htons" htons :: Word16 → Word16
 
 timeSpecAsNanoSecs :: TimeSpec → Integer
-timeSpecAsNanoSecs TimeSpec{..} = toInteger sec * 1000000000 + toInteger nsec
+timeSpecAsNanoSecs t = toInteger (sec t) * 1000000000 + toInteger (nsec t)
 
 getMonotonicNanoSecs :: IO Integer
 getMonotonicNanoSecs = timeSpecAsNanoSecs . getTime Monotonic
