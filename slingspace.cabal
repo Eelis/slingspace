@@ -6,7 +6,7 @@ maintainer: slingspace AT contacts DOT eelis ANOTHERDOT net
 stability: experimental
 build-type: Simple
 synopsis: A 3D Spiderman-like slinging game.
-build-depends: base, GLUT, OpenGL>=2.0, stm, network, template-haskell, random, containers, mtl, clock, MonadRandom, deepseq, array
+build-depends: base, GLUT, OpenGL>=2.0, stm, network, template-haskell, random, containers, mtl, clock, MonadRandom, deepseq, storablevector, storable-tuple, storable-record
 tested-with: GHC==6.6.20070306
 data-files:
   doc/manual.xhtml

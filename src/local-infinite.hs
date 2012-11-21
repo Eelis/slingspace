@@ -8,7 +8,7 @@ import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..))
 import Control.Monad.Fix (fix)
 import MyGL ()
 import MyUtil ((.), read_config_file)
-import Graphics.UI.GLUT (Vector3(..), Color4(..))
+import Graphics.UI.GLUT (Vector3(..), Color3(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import TupleProjection (project)
@@ -19,7 +19,7 @@ name :: String
 name = "Player"
 
 visualize :: GeometricObstacle -> VisualObstacle
-visualize g = VisualObstacle g (Color4 0.9 0.9 0.9 1)
+visualize g = VisualObstacle g (Color3 0.9 0.9 0.9)
 
 main :: IO ()
 main = do
@@ -28,9 +28,10 @@ main = do
 
   gtunnel :: [GeometricObstacle] ← take 200 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
 
-  let vtunnel = map visualize gtunnel
-  atunnel <- TerrainGenerator.flatten vtunnel
+  print gtunnel
+
   let
+    atunnel = TerrainGenerator.flatten (map visualize gtunnel)
     initialPosition = (Vector3 0 1800 1000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
     path = iterate (tickPlayer gtunnel gp_cfg)

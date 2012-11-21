@@ -1,13 +1,13 @@
-{-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell #-}
+{-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
-module TerrainGenerator (Cache(..), start, defaultConfig, flatten, sectorSize, sectorId, SectorId, cubeSize, bytesPerVertex, totalVertices, sectors, totalBytes, bytesPerSector, doublesPerVector, bytesPerDouble, sectorCenter) where
+module TerrainGenerator (Cache, start, defaultConfig, flatten, sectorSize, sectorId, SectorId, cubeSize, totalVertices, sectors, totalBytes, bytesPerSector, sectorCenter, StoredVertex(..)) where
 
 import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
-import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..), Color4(..))
-import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod, Sphere(..))
+import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..), Color3(..))
+import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod)
 import Data.Bits (xor)
 import Control.Monad (replicateM, liftM3, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
@@ -15,58 +15,68 @@ import Data.List (sortBy)
 import MyUtil ((.), tupleToList)
 import Prelude hiding ((.))
 import Control.DeepSeq (deepseq, NFData(..))
-import Data.Array.Storable (StorableArray, MArray, newListArray)
+import qualified Data.StorableVector as SV
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Map (Map)
 import Data.Set (Set)
+import Control.Applicative (liftA3)
 import Foreign.C.Types (CFloat, CDouble)
+import Foreign.Storable (Storable(..), sizeOf)
+import qualified Foreign.Storable.Record as Store
+import Foreign.Storable.Tuple ()
 
-cubeSize, bytesPerSector, bytesPerVertex, vectorsPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, doublesPerVector, bytesPerDouble :: Num a ⇒ a
+cubeSize, bytesPerSector, bytesPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, bytesPerDouble, bytesPerVector :: Num a ⇒ a
 cubeSize = 7
 sectors = cubeSize^3
 obstaclesPerSector = 50
 trianglesPerObstacle = 4
 verticesPerTriangle = 3
 verticesPerSector = verticesPerTriangle * trianglesPerObstacle * obstaclesPerSector
-vectorsPerVertex = 2
-doublesPerVector = 3
-bytesPerDouble = 8
-bytesPerVertex = vectorsPerVertex * doublesPerVector * bytesPerDouble
+bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
+bytesPerDouble = fromIntegral $ sizeOf (undefined :: Double)
+bytesPerVector = fromIntegral $ sizeOf (undefined :: Vector3 GLdouble)
 bytesPerSector = bytesPerVertex * verticesPerSector
-totalVertices = verticesPerSector * sectors
 totalBytes = totalVertices * bytesPerVertex
+totalVertices = verticesPerSector * sectors
 
-data Config = Config
-  { sectorSize :: GLdouble
-  {-, obstaclesPerSector :: Int-} }
+data Config = Config { sectorSize :: GLdouble }
 
 type SectorId = Vector3 Integer
 
 data Sector = Sector
-  { obstacles :: [VisualObstacle]
-  , sectorVertices :: StorableArray Int GLdouble }
+  { obstacles :: ![VisualObstacle]
+  , sectorVertices :: !(SV.Vector StoredVertex) }
 
 type Cache = Map SectorId Sector
 
 instance NFData CFloat
 instance NFData CDouble
-instance NFData (StorableArray a b)
 instance NFData Sector
 
 emptyCache :: Cache
 emptyCache = Map.empty
 
-vectorComponents :: Vector3 a → [a]
-vectorComponents (Vector3 x y z) = [x, y, z]
+data StoredVertex = StoredVertex
+  { storedPosition, storedNormal :: !(Vector3 GLdouble), storedColor :: !(Color3 GLdouble) }
 
-listArray :: (MArray a e m) ⇒ [e] → m (a Int e)
-listArray l = newListArray (0, length l - 1) l
+instance Storable StoredVertex where
+  sizeOf = Store.sizeOf storeVertex
+  alignment = Store.alignment storeVertex
+  peek = Store.peek storeVertex
+  poke = Store.poke storeVertex
 
-flatten :: [VisualObstacle] → IO (StorableArray Int GLdouble)
-flatten obstacles = listArray $ concat
-  [ vectorComponents vertex ++ vectorComponents triangleNormal
-  | AnnotatedTriangle{..} ← geometricObstacle . obstacles >>= obstacleTriangles
+storeVertex :: Store.Dictionary StoredVertex
+storeVertex = Store.run $ liftA3 StoredVertex
+  (Store.element storedPosition)
+  (Store.element storedNormal)
+  (Store.element storedColor)
+
+flatten :: [VisualObstacle] → SV.Vector StoredVertex
+flatten obstacles = SV.pack $
+  [ StoredVertex vertex triangleNormal obstacleColor
+  | VisualObstacle{..} <- obstacles
+  , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle
   , vertex ← tupleToList triangleVertices ]
 
 sectorCenter :: Config → SectorId → V
@@ -75,19 +85,18 @@ sectorCenter Config{..} = (<*> sectorSize) . (fromInteger .)
 seed :: SectorId → Int
 seed (Vector3 x y z) = fromInteger $ xor x $ xor y z
 
-buildSector :: Config → SectorId → IO Sector
-buildSector config@Config{..} sid = do
-  let
+buildSector :: Config → SectorId → Sector
+buildSector config@Config{..} sid = Sector{..}
+  where
     halfSectorSize = sectorSize / 2
     f = do
-      obstacleColor ← getRandomR (Color4 0.3 0.3 0.3 1, Color4 1 1 1 1)
+      obstacleColor ← getRandomR (Color3 0.3 0.3 0.3, Color3 1 1 1)
       replicateM obstaclesPerSector $ do
         c ← getRandomR (Vector3 (-halfSectorSize) (-halfSectorSize) (-halfSectorSize), Vector3 halfSectorSize halfSectorSize halfSectorSize)
         geometricObstacle ← randomObs (c <+> sectorCenter config sid) 800
         return VisualObstacle{..}
     obstacles = evalRand f $ mkStdGen $ seed sid
-  sectorVertices ← flatten obstacles
-  return Sector{..}
+    sectorVertices = flatten obstacles
 
 ball :: Set SectorId
 ball = Set.fromAscList $
@@ -104,17 +113,17 @@ sectorId Config{..} (Vector3 x y z) = Vector3 (round (x / sectorSize)) (round (y
 distance :: SectorId → SectorId → Integer
 distance (Vector3 x y z) (Vector3 x' y' z') = maximum $ abs . [x - x', y - y', z - z']
 
-start :: Config → IO (TChan (SectorId, StorableArray Int GLdouble), V → IO [GeometricObstacle])
+start :: Config → IO (TChan (SectorId, SV.Vector StoredVertex), V → IO [GeometricObstacle])
 start config = do
   toBuffer ← newTChanIO
   queue ← newEmptyTMVarIO
   let initialCache = emptyCache
   mp ← newTVarIO initialCache
-  forkIO $ flip fix initialCache $ \loop storedSectors → do
+  forkIO $ flip fix initialCache $ \loop (storedSectors :: Cache) → do
     newSector ← atomically (sectorId config . takeTMVar queue)
     let sectorsWeWant = Set.map{-Monotonic-} (<+> newSector) ball
     foldM (\ss sid → do
-      y ← buildSector config sid
+      let y = buildSector config sid
       deepseq y $ do
       let n = Map.insert sid y ss
       atomically $ writeTChan toBuffer (sid, sectorVertices y) >> writeTVar mp n

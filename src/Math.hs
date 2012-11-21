@@ -4,7 +4,7 @@ module Math where
 
 import Prelude hiding ((.))
 import MyGL ()
-import Graphics.Rendering.OpenGL.GL hiding (Plane)
+import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, Color3(..), Normal3(..), Color4(..), Vertex3(..))
 import Control.Monad
 import MyUtil ((.), tupleToList)
 import Data.Function (on)
@@ -18,6 +18,11 @@ instance Random a ⇒ Random (Vector3 a) where
   random = runRand $ liftM3 Vector3 getRandom getRandom getRandom
   randomR (Vector3 lx ly lz, Vector3 hx hy hz) = runRand $
     liftM3 Vector3 (getRandomR (lx, hx)) (getRandomR (ly, hy)) (getRandomR (lz, hz))
+
+instance Random a ⇒ Random (Color3 a) where
+  random = runRand $ liftM3 Color3 getRandom getRandom getRandom
+  randomR (Color3 lx ly lz, Color3 hx hy hz) = runRand $
+    liftM3 Color3 (getRandomR (lx, hx)) (getRandomR (ly, hy)) (getRandomR (lz, hz))
 
 instance Random a ⇒ Random (Color4 a) where
   random = runRand $ liftM4 Color4 getRandom getRandom getRandom getRandom
@@ -43,6 +48,28 @@ Vector3 x y z <*> s = Vector3 (x * s) (y * s) (z * s)
 (</>) :: Fractional a ⇒ Vector3 a → a → Vector3 a
 Vector3 x y z </> s = Vector3 (x / s) (y / s) (z / s)
 
+data Matrix33 a = Matrix33 !(Vector3 a) !(Vector3 a) !(Vector3 a) -- three rows
+  deriving (Eq, Show, Read)
+
+scalar_matrix_mult :: Num a => a -> Matrix33 a -> Matrix33 a
+scalar_matrix_mult x (Matrix33 a b c) = Matrix33 (a <*> x) (b <*> x) (c <*> x)
+
+inv :: Fractional a => Matrix33 a -> Matrix33 a
+inv (Matrix33 (Vector3 a b c) (Vector3 d e f) (Vector3 g h k)) =
+    scalar_matrix_mult (1 / det) (Matrix33 (Vector3 a' d' g') (Vector3 b' e' h') (Vector3 c' f' k'))
+  where
+    det = a * (e * k - f * h) - b * (k * d - f * g) + c * (d * h - e * g)
+    a' = e * k - f * h
+    b' = f * g - d * k
+    c' = d * h - e * g
+    d' = c * h - b * k
+    e' = a * k - c * g
+    f' = g * b - a * h
+    g' = b * f - c * e
+    h' = c * d - a * f
+    k' = a * e - b * d
+  -- Copied from Wikipedia
+
 tov :: Vector3 a → Vertex3 a
 tov (Vector3 !x !y !z) = Vertex3 x y z
 
@@ -53,7 +80,7 @@ norm_2 :: Floating a ⇒ Vector3 a → a
 norm_2 (Vector3 !x !y !z) = sqrt $ x*x + y*y + z*z
 
 normalize_v :: Floating a ⇒ Vector3 a → Vector3 a
-normalize_v v = v </> (norm_2 v)
+normalize_v v = v </> norm_2 v
 
 cross_prod :: Num a ⇒ Vector3 a → Vector3 a → Vector3 a
 cross_prod (Vector3 x y z) (Vector3 x' y' z') =
@@ -68,21 +95,22 @@ data AnnotatedTriangle = AnnotatedTriangle
   { triangleNormal :: !V
   , triangleVertices :: !(V, V, V)
     -- TODO: can't we make the V's inside the tuple strict? are tuples strict?
-  , obs_projs :: !(V, V, V) -- allow for fast calculation of ray intersections
   , triangleCenter :: !V
+  , toTriangleCoords :: !(Matrix33 GLdouble) -- maps world coordinates to triangle coordinates with (b-a, c-a, normal) as basis
   } -- should only ever be constructed using annotate_triangle
   deriving (Show, Read, Eq)
 
 annotateTriangle :: V → V → V → AnnotatedTriangle
-annotateTriangle a b c =
-  AnnotatedTriangle
-    (normalize_v (cross_prod (b <-> a) (c <-> a)))
-    (a, b, c)
-    (kat a b c, kat b c a, kat c a b)
-    ((a <+> b <+> c) </> 3)
+annotateTriangle a b c = AnnotatedTriangle{..}
   where
-   kat a' b' c' = c' <-> ((natob <*> inner_prod natob (c' <-> a')) <+> a')
-    where natob = normalize_v (b' <-> a')
+    triangleNormal@(Vector3 nx ny nz) = normalize_v (cross_prod atob atoc)
+    triangleVertices = (a, b, c)
+    triangleCenter = (a <+> b <+> c) </> 3
+    atob@(Vector3 bx by bz) = (b <-> a)
+    atoc@(Vector3 cx cy cz) = (c <-> a)
+    toTriangleCoords = inv $ Matrix33 (Vector3 bx cx nx) (Vector3 by cy ny) (Vector3 bz cz nz)
+
+newtype OriginRay = OriginRay V
 
 data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
 data Plane = Plane { planeNormal, planePoint :: !V }
@@ -92,11 +120,11 @@ plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
 class Collision a b c | a b → c where collision :: a → b → c
 
-data Sphere = Sphere { sphereCenter :: V, sphereSquaredRadius :: GLdouble }
+data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble }
   deriving (Read, Show)
 
 instance Collision Ray Sphere Bool where
-  collision Ray{..} Sphere{..} = b*b - 4*a*c >= 0
+  collision !Ray{..} Sphere{..} = b*b - 4*a*c >= 0
     where
       a = inner_prod rayDirection rayDirection
       b = 2 * inner_prod rayDirection o
@@ -107,15 +135,21 @@ sameDirection :: V → V → Bool
 sameDirection a b = inner_prod a b >= 0
 
 instance Collision (Ray, GLdouble → V → Bool) AnnotatedTriangle (Maybe (GLdouble, V)) where
-  collision (ray@Ray{..}, inter_pred) t@(AnnotatedTriangle _ (a, b, c) (anp, bp, cp) _) = do
-    eta ← ray `collision` plane t
-    let coll = rayOrigin <+> (rayDirection <*> eta)
-    guard $ eta >= 0 && inter_pred eta coll &&
-      sameDirection anp (coll <-> a) &&
-      sameDirection bp (coll <-> b) &&
-      sameDirection cp (coll <-> c)
+  collision !(Ray{..}, inter_pred) !AnnotatedTriangle{..} = do
+    let
+      (a, _, _) = triangleVertices
+      Vector3 h i j = matrix_vector_mult toTriangleCoords (rayOrigin <-> a)
+      Vector3 k l m = matrix_vector_mult toTriangleCoords rayDirection
+      coll = rayOrigin <+> (rayDirection <*> eta)
+      eta = - j / m
+      v = h + k * eta
+      w = i + l * eta
+    guard $ eta >= 0 && inter_pred eta coll && v >= 0 && w >= 0 && v + w <= 1
     return (eta, coll)
       -- The predicate is integrated because applying it after-the-fact is more expensive, because by that time the three inner_prods have already been evaluated.
+
+matrix_vector_mult :: Num a => Matrix33 a -> Vector3 a -> Vector3 a
+matrix_vector_mult !(Matrix33 a b c) d = Vector3 (inner_prod a d) (inner_prod b d) (inner_prod c d)
 
 instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GLdouble, V, AnnotatedTriangle)) where
   collision ray triangles
@@ -124,12 +158,6 @@ instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GL
     where
       collisions :: [(GLdouble, V, AnnotatedTriangle)]
       collisions = (\(x,(y,z)) → (y,z,x)) . mapMaybe (\triangle → (,) triangle . (ray `collision` triangle)) triangles
-
-instance Collision Ray Plane (Maybe GLdouble) where
-  collision Ray{..} Plane{..}
-    | u < 0 = Just $ inner_prod planeNormal (planePoint <-> rayOrigin) / u
-    | otherwise = Nothing
-   where u = inner_prod planeNormal rayDirection
 
 rayThrough :: V → V → Ray
 rayThrough from to = Ray from (to <-> from)
@@ -150,12 +178,12 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
 
 data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
-  , obstacleTriangles :: [AnnotatedTriangle]
+  , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
 
 data VisualObstacle = VisualObstacle
-  { geometricObstacle :: GeometricObstacle
-  , obstacleColor :: Color4 GLfloat }
+  { geometricObstacle :: !GeometricObstacle
+  , obstacleColor :: !(Color3 GLdouble) }
 
 squaredDistance :: V → V → GLdouble
 squaredDistance a b = inner_prod d d
@@ -190,7 +218,7 @@ at_min_y (AnnotatedTriangle _ (Vector3 _ y0 _, Vector3 _ y1 _, Vector3 _ y2 _) _
 obst_min_y :: GeometricObstacle → GLdouble
 obst_min_y = minimum . (at_min_y .) . obstacleTriangles
 
-data Num a ⇒ MMatrix a = MMatrix a a a a a a a a a deriving Show
+data MMatrix a = MMatrix !a !a !a !a !a !a !a !a !a deriving Show
 
 idMatrix :: Num a ⇒ MMatrix a
 idMatrix = MMatrix 1 0 0 0 1 0 0 0 1

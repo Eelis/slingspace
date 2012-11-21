@@ -81,8 +81,8 @@ tickPlayer collidable cfg p@Player{body=body@Ray{..}, ..} = if dead then p else 
     { body = newBody, guns = tickGun . guns {-, dead = isJust collision-} }
   where
     Vector3 _ oldy _ = rayOrigin
-    tickGun (Rope ray (n + 1)) = Rope (progressRay ray) n
-    tickGun r = r
+    tickGun r@(Rope _ 0) = r
+    tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
     newBody
       | Just d ← collisionPos = Ray d (Vector3 0 0 0)
       | otherwise = Ray

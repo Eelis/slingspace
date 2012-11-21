@@ -5,7 +5,7 @@ module Gui (Controller(..), State(..), gui) where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting)
+import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
 import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, Ray(..), GeometricObstacle)
 import Data.Maybe (isJust)
@@ -20,8 +20,11 @@ import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tu
 import Prelude hiding ((.))
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
-import TerrainGenerator (sectorCenter, bytesPerVertex, totalVertices, totalBytes, bytesPerDouble, doublesPerVector, sectorId)
-import Data.Array.Storable (StorableArray, withStorableArray)
+import TerrainGenerator (sectorCenter, totalVertices, totalBytes, sectorId, StoredVertex)
+import Foreign.Storable (sizeOf)
+
+import qualified Data.StorableVector as SV
+import qualified Data.StorableVector.Pointer as SVP
 import qualified TerrainGenerator
 
 type SectorId = Vector3 Integer
@@ -99,7 +102,7 @@ data State = State
 
 data Controller = Controller
   { state :: State
-  , tick :: IO (Maybe (Integer, StorableArray Int GLdouble), Controller)
+  , tick :: IO (Maybe (Integer, SV.Vector StoredVertex), Controller)
   , release :: Gun → Controller
   , fire :: Gun → V → Controller
   , spawn :: Controller }
@@ -318,17 +321,27 @@ drawObstacles :: Gui ()
 drawObstacles = do
   GuiContext{scheme=Scheme{..}, ..} ← ask
   lift $ do
+  
   GLUT.materialDiffuse Front $= Color4 1 1 1 1
   GLUT.materialAmbient Front $= Color4 0.4 0.6 0.8 1
   GLUT.clientState GLUT.VertexArray $= Enabled
   GLUT.clientState GLUT.NormalArray $= Enabled
+  GLUT.clientState GLUT.ColorArray $= Enabled
   GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-  GLUT.arrayPointer GLUT.VertexArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex nullPtr
-  GLUT.arrayPointer GLUT.NormalArray $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (doublesPerVector*bytesPerDouble))
+  let bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
+  let bytesPerVector = fromIntegral $ sizeOf (undefined :: Vector3 GLdouble)
+  GLUT.arrayPointer GLUT.VertexArray
+    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (0 * bytesPerVector))
+  GLUT.arrayPointer GLUT.NormalArray
+    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (1 * bytesPerVector))
+  GLUT.arrayPointer GLUT.ColorArray
+    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (2 * bytesPerVector))
+
   GLUT.drawArrays Triangles 0 (fromIntegral totalVertices)
   GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
   GLUT.clientState GLUT.VertexArray $= Disabled
   GLUT.clientState GLUT.NormalArray $= Disabled
+  GLUT.clientState GLUT.ColorArray $= Disabled
 
 drawPlayers :: Map String Player → Gui ()
 drawPlayers players = do
@@ -392,6 +405,7 @@ gui controller name gameplayConfig = do
   GLUT.ambient ballLight $= ballLight_ambient
   GLUT.diffuse ballLight $= ballLight_diffuse
   GLUT.attenuation ballLight $= ballLight_attenuation
+  GLUT.colorMaterial $= Just (FrontAndBack, AmbientAndDiffuse)
 
   GLUT.blend $= Enabled
   GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
@@ -456,7 +470,6 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig c
         Nothing -> return ()
         Just (i, a) -> do
           GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-          withStorableArray a $
-            GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer
-              (fromInteger $ i * TerrainGenerator.bytesPerSector) TerrainGenerator.bytesPerSector
+          GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer
+              (fromInteger $ i * TerrainGenerator.bytesPerSector) TerrainGenerator.bytesPerSector (SVP.ptr (SVP.cons a))
       return c

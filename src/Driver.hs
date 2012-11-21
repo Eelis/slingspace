@@ -4,7 +4,6 @@ import Gui (gui)
 import qualified Gui
 import qualified Logic
 import qualified Data.Map as Map
-import Graphics.Rendering.OpenGL.GL (GLdouble)
 import Logic (Player(..), GameplayConfig, tickPlayer, Gun)
 import Math (Ray(..), V, GeometricObstacle)
 import Data.Function (fix)
@@ -14,8 +13,8 @@ import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..))
 import Prelude hiding ((.))
 import qualified TerrainGenerator
-import TerrainGenerator (cubeSize)
-import Data.Array.Storable (StorableArray)
+import TerrainGenerator (cubeSize, StoredVertex)
+import qualified Data.StorableVector as SV
 import Control.Concurrent.STM (STM, isEmptyTChan, atomically, TChan, readTChan)
 
 name :: String
@@ -23,7 +22,7 @@ name = "Player"
 
 data Static = Static
   { gameplayConfig :: GameplayConfig
-  , toBuffer :: TChan (TerrainGenerator.SectorId, StorableArray Int GLdouble)
+  , toBuffer :: TChan (TerrainGenerator.SectorId, SV.Vector StoredVertex)
   , contactGenerator :: V → IO [GeometricObstacle] }
 
 data State = State
@@ -32,7 +31,7 @@ data State = State
 
 data Controller = Controller
   { state :: State
-  , tick :: IO (Maybe (Integer, StorableArray Int GLdouble), Controller)
+  , tick :: IO (Maybe (Integer, SV.Vector StoredVertex), Controller)
   , release :: Gun → Controller
   , fire :: Gun → V → Controller
   , spawn :: Controller }
