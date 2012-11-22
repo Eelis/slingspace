@@ -21,6 +21,7 @@ import MyGL ()
 import MyUtil ((.))
 import TupleProjection (project)
 import Prelude hiding ((.))
+import qualified Octree
 
 data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
 
@@ -76,8 +77,8 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-tickPlayer :: [GeometricObstacle] → GameplayConfig → Player → Player
-tickPlayer collidable cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
+tickPlayer :: Octree.CubeBox GeometricObstacle → GameplayConfig → Player → Player
+tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
     { body = newBody, guns = tickGun . guns {-, dead = isJust collision-} }
   where
     Vector3 _ oldy _ = rayOrigin
@@ -90,15 +91,19 @@ tickPlayer collidable cfg p@Player{body=body@Ray{..}, ..} = if dead then p else 
         ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns)) <*> friction cfg)
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
-      | otherwise = $(project 1) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filter (collision body . obstacleSphere) collidable >>= obstacleTriangles)
+      | otherwise = $(project 1) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
+    filteredObstacles = Octree.query body tree
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-find_target :: [GeometricObstacle] → Player → GameplayConfig → Ray → Maybe V
-find_target shootableObstacles player lcfg@GameplayConfig{..} gunRay =
+find_target :: Octree.CubeBox GeometricObstacle → Player → GameplayConfig → Ray → Maybe V
+find_target tree player lcfg@GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
   $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
-    (filter (collision gunRay . obstacleSphere) shootableObstacles >>= obstacleTriangles)
+    (filteredObstacles >>= obstacleTriangles)
+  where
+    filteredObstacles = Octree.query longGunRay tree
+    longGunRay = Ray gunOrigin (gunDirection <*> shooting_range) -- todo
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z

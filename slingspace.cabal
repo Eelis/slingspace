@@ -20,11 +20,11 @@ data-files:
   config/infinite-tunnel.txt
 category: games
 
-executable: slingspace
-main-is: Driver.hs
-hs-source-dirs: src
-ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind -threaded
-extensions: TemplateHaskell CPP ForeignFunctionInterface
+-- executable: slingspace
+-- main-is: Driver.hs
+-- hs-source-dirs: src
+-- ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind -threaded
+-- extensions: TemplateHaskell CPP ForeignFunctionInterface
 
 executable: slingspace-inf
 main-is: local-infinite.hs

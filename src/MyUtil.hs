@@ -2,7 +2,7 @@
 
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse
   ) where
 
 import Prelude hiding (catch, (.))
@@ -134,3 +134,7 @@ instance TupleToList (a, a, a) a where tupleToList (x, y, z) = [x, y, z]
 
 whenJust :: Monad m ⇒ Maybe a → (a → m ()) → m ()
 whenJust = flip (maybe (return ()))
+
+orElse :: Maybe a -> a -> a
+orElse Nothing d = d
+orElse (Just x) _ = x

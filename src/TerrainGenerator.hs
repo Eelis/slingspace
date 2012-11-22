@@ -1,6 +1,6 @@
 {-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
-module TerrainGenerator (Cache, start, defaultConfig, flatten, sectorSize, sectorId, SectorId, cubeSize, totalVertices, sectors, totalBytes, bytesPerSector, sectorCenter, StoredVertex(..)) where
+module TerrainGenerator (Cache, start, defaultConfig, flatten, sectorSize, sectorId, SectorId, cubeSize, sectors, totalBytes, bytesPerSector, sectorCenter, StoredVertex(..), trianglesPerObstacle, verticesPerTriangle, bytesPerObstacle, verticesPerObstacle) where
 
 import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
@@ -26,12 +26,15 @@ import Foreign.Storable (Storable(..), sizeOf)
 import qualified Foreign.Storable.Record as Store
 import Foreign.Storable.Tuple ()
 
-cubeSize, bytesPerSector, bytesPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, bytesPerDouble, bytesPerVector :: Num a ⇒ a
+cubeSize, bytesPerSector, bytesPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle :: Num a ⇒ a
 cubeSize = 7
 sectors = cubeSize^3
 obstaclesPerSector = 50
 trianglesPerObstacle = 4
+verticesPerObstacle = trianglesPerObstacle * verticesPerTriangle
+bytesPerObstacle = trianglesPerObstacle * bytesPerTriangle
 verticesPerTriangle = 3
+bytesPerTriangle = verticesPerTriangle * bytesPerVertex
 verticesPerSector = verticesPerTriangle * trianglesPerObstacle * obstaclesPerSector
 bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
 bytesPerDouble = fromIntegral $ sizeOf (undefined :: Double)
