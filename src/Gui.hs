@@ -193,7 +193,7 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
   cameraRef ← newIORef $ Camera cam_init_dist 0 0
   stateRef ← newIORef initialState
 
-  lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
+  -- lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
 
   GLUT.reshapeCallback $= Just (onReshape camConf)
 
@@ -203,10 +203,10 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
     state@(Controller{..}, _, _) ← readIORef stateRef
     runReaderT (onDisplay state name camera clientState) context
 
-    new ← getMonotonicMilliSecs
-    old ← readIORef lastDisplayTime
-    putStrLn $ show ((1000 :: Double) / fromIntegral (new - old)) ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
-    writeIORef lastDisplayTime new
+    -- new ← getMonotonicMilliSecs
+    -- old ← readIORef lastDisplayTime
+    -- putStrLn $ show ((1000 :: Double) / fromIntegral (new - old)) ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
+    -- writeIORef lastDisplayTime new
   GLUT.keyboardMouseCallback $= Just (\x y z w → do
     (c, o, tree) <- readIORef stateRef
     c' <- onInput guiConfig clientStateRef pauseRef cameraRef cursorPos x y z w c
