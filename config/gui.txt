@@ -3,7 +3,7 @@ GuiConfig
 , cross_offset_hor = 0.19
 , cross_offset_ver = 0.12
 , ugly = False
-, floorConf = Just Shadows
+, floorConf = Just (Grid { grid_size = 200, grid_type = LinedGrid {grid_line_width=3} })
 , playerSize = 35
 , camConf = CameraConfig
   { viewing_dist = 30000

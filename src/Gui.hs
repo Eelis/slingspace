@@ -128,8 +128,8 @@ onDisplay (Controller{..}, obstacleCount, _) myname Camera{..} clientState = do
   drawPlayers (head . players)
   drawObstacles obstacleCount
   lift $ lighting $= Disabled
-  lift $ drawFutures players
-  --drawFloor (shootableObstacles >>= obstacleTriangles) me
+  --lift $ drawFutures players
+  drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
   drawRopes (head . players)
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
@@ -227,17 +227,19 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
 ballLight :: GLUT.Light
 ballLight = GLUT.Light 0
 
-drawFloor :: [AnnotatedTriangle] → Player → Gui ()
-drawFloor visible_obs Player{..} = do
+drawFloor :: {-[AnnotatedTriangle] →-} Player → Gui ()
+drawFloor {-visible_obs-} Player{..} = do
   Scheme{..} ← asks scheme
   GuiConfig{camConf=CameraConfig{..}, ..} ← asks guiConfig
   lift $ do
   whenJust floorConf $ \kind → do
   case kind of
+{-
     Shadows → do
       GLUT.color shadow_color
       GLUT.renderPrimitive Triangles $ forM_ visible_obs $
         mapM (vertex . tov . toFloor) . tupleToList . triangleVertices
+-}
     Grid{..} → do
       GLUT.color grid_color
       let
