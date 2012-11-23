@@ -1,8 +1,9 @@
-{-# LANGUAGE UnicodeSyntax, TypeOperators #-}
+{-# LANGUAGE UnicodeSyntax, TypeOperators, ScopedTypeVariables #-}
 
 module Obstacles
   ( niceTunnel, bigField
   , infinite_tunnel
+  , benchmark_tunnel
   , TunnelConfig
   , randomObs
   ) where
@@ -93,7 +94,6 @@ data InfiniteTunnelConfig = InfiniteTunnelConfig
 infinite_tunnel :: (Functor m, MonadRandom m) ⇒ TunnelConfig → m [(V, V, GeometricObstacle)]
 infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Vector3 0 0 0) {- from -}
   where
-    tu :: (Functor m, MonadRandom m) ⇒ [GeometricObstacle] → GLdouble → GLdouble → V → m [(V, V, GeometricObstacle)]
     tu prev ang width from = do
       coff ← getRandomR (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
       newobst ← randomObs (from <+> coff) (obstacle_size cf)
@@ -108,3 +108,14 @@ infinite_tunnel cf = tu [] 0 {-(pi * 0.5)-} {- ang -} (init_tunnel_width cf) (Ve
         ((from, d, newobst) :) . tu (newobst : take 10 prev) (ang + angChange)
           (bounded (width + widthChange) (min_tunnel_width cf) (max_tunnel_width cf))
           (from <+> (d <*> obstacle_density cf))
+
+benchmark_tunnel :: forall m . (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
+benchmark_tunnel = take 1000 . tu (Vector3 0 0 0)
+  where
+    width = 1500
+    obsSize = 800
+    tu :: V → m [GeometricObstacle]
+    tu from = do
+      coff ← getRandomR (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
+      newobst ← randomObs (from <+> coff) obsSize
+      (newobst :) . tu (from <+> Vector3 0 300 0)
