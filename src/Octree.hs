@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns #-}
 
-module Octree (Box, CubeBox, empty, query, insert, toList, fromList) where
+module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble)
 import Math (Collision(collision), FitsInCube(fitsInCube), Cube(..), (<*>), (<+>))
@@ -29,13 +29,13 @@ mapFirst (h : t) f
 
 data Box a = Box
   { objects :: ![a] -- which don't fit into smaller boxes
-  , subs :: !(Subs a) }
+  , subBoxes :: !(Subs a) }
 
 
 showBox :: Show a => Box a -> [String]
 showBox Box{..} =
   ("[" ++ replicate (length objects) '+' {-show objects-} ++ "]") : map ("  " ++)
-    (concatMap (\mb -> case mb of Nothing -> []; Just b -> showBox b) subs)
+    (concatMap (\mb -> case mb of Nothing -> []; Just b -> showBox b) subBoxes)
 
 
 instance Show a => Show (Box a) where
@@ -46,7 +46,7 @@ type CubeBox a = (Cube, Box a)
 
 
 boxToList :: Box a -> [a]
-boxToList Box{..} = objects ++ concatMap (\mb -> case mb of Nothing -> []; Just b -> boxToList b) subs
+boxToList Box{..} = objects ++ concatMap (\mb -> case mb of Nothing -> []; Just b -> boxToList b) subBoxes
 
 
 toList :: CubeBox a -> [a]
@@ -72,11 +72,11 @@ subCubes Cube{..} = [Cube (cubeCorner <+> (i <*> subOff)) subSize | i <- subIds 
 doInsert :: FitsInCube a => a -> Cube -> Maybe (Box a) -> Maybe (Box a)
 doInsert obj cube mb
   | not (obj `fitsInCube` cube) = Nothing
-  | otherwise = Just $ case mapFirst (zip (subCubes cube) subs) f of
-        Nothing -> Box (obj : objects) subs
-        Just subs' -> Box objects (map snd subs')
+  | otherwise = Just $ case mapFirst (zip (subCubes cube) subBoxes) f of
+        Nothing -> Box (obj : objects) subBoxes
+        Just subBoxes' -> Box objects (map snd subBoxes')
   where
-    Box{objects,subs} = mb `orElse` emptyBox
+    Box{objects,subBoxes} = mb `orElse` emptyBox
     f (c', msb) = case doInsert obj c' msb of
       Nothing -> Nothing
       Just x -> Just (c', Just x)
@@ -89,13 +89,13 @@ insert (c, b) o
 fromList :: (Show a, FitsInCube a) => Cube -> [a] -> CubeBox a
 fromList c = foldl insert (empty c)
 
-doQuery :: Collision q Cube Bool => q -> Cube -> Box a -> [a]
-doQuery q !cube@Cube{..} !Box{..}
-  | not (collision q cube) = []
-  | otherwise = objects ++ concatMap f (zip (subCubes cube) subs)
-  where
-    f (_, Nothing) = []
-    f (c, Just b) = doQuery q c b
+subs :: CubeBox a -> [CubeBox a]
+subs (c, Box{..}) = [(c', b) | (c', Just b) <- zip (subCubes c) subBoxes]
+
+doQuery :: Collision q Cube Bool => q -> CubeBox a -> [a]
+doQuery q !cb@(c, b)
+  | not (collision q c) = []
+  | otherwise = objects b ++ concatMap (doQuery q) (subs cb)
 
 query :: Collision q Cube Bool => q -> CubeBox a -> [a]
-query q (c, b) = doQuery q c b
+query q (c, b) = doQuery q (c, b)
