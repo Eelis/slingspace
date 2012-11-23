@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, MultiWayIf, PatternGuards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, PatternGuards #-}
 
 module Math where
 
@@ -175,13 +175,13 @@ instance Collision Ray Cube Bool where
   collision
     !Ray{rayOrigin=rayOrigin@(Vector3 rox roy roz), rayDirection=rayDirection@(Vector3 rdx rdy rdz)}
     !cube@Cube{cubeCorner=Vector3 ccx ccy ccz,..} =
-      if
-        | (rox <= ccx && rex <= ccx) || (cex <= rox && cex <= rex) ||
-          (roy <= ccy && rey <= ccy) || (cey <= roy && cey <= rey) ||
-          (roz <= ccz && rez <= ccz) || (cez <= roz && cez <= rez) -> False
-        | collision rayOrigin cube && collision (rayOrigin <+> rayDirection) cube -> True
-        | otherwise -> and bs && (null rs || maximum (0 : map fst rs) <= minimum (1 : map snd rs))
+      not wayOff && (allInside || (and bs && (null rs || maximum (0 : map fst rs) <= minimum (1 : map snd rs))))
     where
+      wayOff =
+        (rox <= ccx && rex <= ccx) || (cex <= rox && cex <= rex) ||
+        (roy <= ccy && rey <= ccy) || (cey <= roy && cey <= rey) ||
+        (roz <= ccz && rez <= ccz) || (cez <= roz && cez <= rez)
+      allInside = collision rayOrigin cube && collision (rayOrigin <+> rayDirection) cube
       rayEnd@(Vector3 rex rey rez) = rayOrigin <+> rayDirection
       cubeOppCorner@(Vector3 cex cey cez) = Vector3 (ccx + cubeSize) (ccy + cubeSize) (ccz + cubeSize)
       (bs, rs) = partitionEithers [iX, iY, iZ]
