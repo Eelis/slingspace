@@ -7,7 +7,7 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, Cube(..))
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -95,8 +95,10 @@ data ClientGunState = ClientGunState { target :: Maybe V, fire_state :: FireStat
 type ClientState = Map Gun ClientGunState
 type Players = Map String [Player]
 type ObstacleCount = Int
-type State = (Controller, ObstacleCount, Octree.CubeBox GeometricObstacle)
-type ObstacleUpdate = (SV.Vector StoredVertex, Octree.CubeBox GeometricObstacle)
+type Tree = Octree.CubeBox GeometricObstacle
+type State = (Controller, ObstacleCount, Tree)
+type ObstacleUpdate = (SV.Vector StoredVertex, Tree)
+
 
 data Controller = Controller
   { players :: Players
@@ -113,7 +115,7 @@ data GuiContext = GuiContext { obstacleBuffer :: GLUT.BufferObject, scheme :: Sc
 type Gui = ReaderT GuiContext IO
 
 onDisplay :: State → String → Camera → ClientState → Gui ()
-onDisplay (Controller{..}, obstacleCount, _) myname Camera{..} clientState = do
+onDisplay (Controller{..}, obstacleCount, tree) myname Camera{..} clientState = do
   lift $ do
     GLUT.clear [ColorBuffer, DepthBuffer]
     GLUT.loadIdentity
@@ -128,14 +130,14 @@ onDisplay (Controller{..}, obstacleCount, _) myname Camera{..} clientState = do
   drawPlayers (head . players)
   drawObstacles obstacleCount
   lift $ lighting $= Disabled
-  lift $ drawFutures players
+  --lift $ drawFutures players
+  --drawTree tree
   drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
   drawRopes (head . players)
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
   drawCrossHairs clientState
   lift swapBuffers
-
 
 onReshape :: CameraConfig → GLUT.Size → IO ()
 onReshape CameraConfig{..} s@(GLUT.Size w h) = do
@@ -260,6 +262,19 @@ drawFloor {-visible_obs-} Player{..} = do
           GLUT.renderPrimitive Points $
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               vertex $ tov $ Vector3 x' 0 z'
+
+drawTree :: Tree -> Gui ()
+drawTree = lift . renderPrimitive Lines . go Nothing
+  where
+    go :: Maybe V -> Tree -> IO ()
+    go mp t = do
+      let
+        s = cubeSize (fst t) / 2 :: GLdouble
+        center = cubeCorner (fst t) <+> Vector3 s s s
+      forM_ (Octree.subs t) (go (Just center))
+      case mp of
+        Nothing -> return ()
+        Just p -> mapM_ (vertex . tov) [center, p]
 
 drawCrossHairs :: ClientState → Gui ()
 drawCrossHairs clientState = do
