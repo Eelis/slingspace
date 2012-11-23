@@ -1,2 +1,4 @@
 dist
 .setup-config
+*.hi
+*.o
