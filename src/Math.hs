@@ -12,6 +12,7 @@ import Data.List (minimumBy)
 import Data.Either (partitionEithers)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Monad.Random (Random(..), MonadRandom(..), runRand)
+import Control.DeepSeq (NFData)
 
 import Debug.Trace (trace)
 
@@ -119,6 +120,8 @@ data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
 data Plane = Plane { planeNormal, planePoint :: !V }
 data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Read, Show)
 data Cube = Cube { cubeCorner :: !(Vector3 GLdouble), cubeSize :: !GLdouble } deriving (Read, Show)
+
+instance NFData Cube
 
 plane :: AnnotatedTriangle → Plane
 plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
@@ -247,6 +250,8 @@ data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
   , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
+
+instance NFData GeometricObstacle
 
 data VisualObstacle = VisualObstacle
   { geometricObstacle :: !GeometricObstacle

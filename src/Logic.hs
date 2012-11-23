@@ -92,12 +92,13 @@ tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = (\(_, x, _) -> x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
     filteredObstacles = Octree.query body tree
+      -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate) 
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
 find_target :: Octree.CubeBox GeometricObstacle → Player → GameplayConfig → Ray → Maybe V
-find_target tree player lcfg@GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
+find_target tree player GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
   (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where

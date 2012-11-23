@@ -4,12 +4,13 @@ import Logic (Player(..), tickPlayer)
 import qualified Data.Map as Map
 import Math (GeometricObstacle(..), Ray(..), Cube(..))
 import MyGL ()
-import MyUtil (read_config_file)
+import MyUtil (read_config_file, getMonotonicMilliSecs)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (benchmark_tunnel)
 import Control.Monad.Random (evalRandIO, evalRand)
 import System.Random (mkStdGen)
 import qualified Octree
+import Control.DeepSeq (deepseq)
 
 mega = 2^20
 twomega = 2^21
@@ -20,9 +21,14 @@ main = do
   let
     tree = Octree.fromList (Cube (Vector3 (-mega) (-mega) (-mega)) twomega) obstacles
     obstacles = evalRand benchmark_tunnel (mkStdGen 4)
-    initialPosition = Vector3 0 50000 0
-    initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
+    initialPositions = [Vector3 x 50000 0 | x <- [-10..10]]
+    initialPlayers = [Player (Ray p (Vector3 0 0 0)) Map.empty False | p <- initialPositions]
 
   --putStrLn $ unlines $ map (show . (\(Vector3 _ y _) -> y) . rayOrigin . body) $ take 6000 $ iterate (tickPlayer tree gp_cfg) initialPlayer
 
-  print $ body $ iterate (tickPlayer tree gp_cfg) initialPlayer !! 6000
+  deepseq tree $ do
+
+  t ← getMonotonicMilliSecs
+  print $ [ body (iterate (tickPlayer tree gp_cfg) p !! 6000) | p <- initialPlayers]
+  t' ← getMonotonicMilliSecs
+  print $ t' - t
