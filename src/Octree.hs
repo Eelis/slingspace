@@ -88,13 +88,13 @@ fromList c = foldl insert (empty c)
 subs :: CubeBox a -> [CubeBox a]
 subs (_, Box{subBoxes}) = [ (c, b) | (c, Just b) <- Vector.toList subBoxes ]
 
-doQuery :: Collision q Cube Bool => q -> CubeBox a -> [a]
-doQuery !q !(c, b@Box{subBoxes})
-  | not (collision q c) = []
-  | otherwise = Vector.foldl' f (objects b) subBoxes
-  where
-    f a (_, Nothing) = a
-    f a (c', Just b') = a ++ doQuery q (c', b')
-
 query :: Collision q Cube Bool => q -> CubeBox a -> [a]
-query q (c, b) = doQuery q (c, b)
+query !q = go
+  where
+    go!(c, Box{..})
+      | not (collision q c) = []
+      | otherwise = Vector.foldl' f objects subBoxes
+      where
+        f a (_, Nothing) = a
+        f a (c', Just b') = a ++ go (c', b')
+

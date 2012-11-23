@@ -8,12 +8,12 @@ import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
 import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, Cube(..))
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, listToMaybe)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Control.Monad (foldM)
-import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, toFloor)
+import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, toFloor, Life(..), moments)
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
@@ -22,6 +22,7 @@ import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
 import TerrainGenerator (StoredVertex, trianglesPerObstacle, verticesPerTriangle)
 import Foreign.Storable (sizeOf)
+
 import qualified Octree
 import qualified Data.StorableVector as SV
 import qualified Data.StorableVector.Pointer as SVP
@@ -93,7 +94,7 @@ data Camera = Camera { cam_dist, cam_xrot, cam_yrot :: !GLdouble }
 data FireState = FireAsap | Fired | Idle
 data ClientGunState = ClientGunState { target :: Maybe V, fire_state :: FireState }
 type ClientState = Map Gun ClientGunState
-type Players = Map String [Player]
+type Players = Map String Life
 type ObstacleCount = Int
 type Tree = Octree.CubeBox GeometricObstacle
 type State = (Controller, ObstacleCount, Tree)
@@ -114,6 +115,9 @@ initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [Le
 data GuiContext = GuiContext { obstacleBuffer :: GLUT.BufferObject, scheme :: Scheme, guiConfig :: GuiConfig }
 type Gui = ReaderT GuiContext IO
 
+birth :: Life -> Maybe Player -- Nothing if stillborn
+birth = listToMaybe . moments
+
 onDisplay :: State → String → Camera → ClientState → Gui ()
 onDisplay (Controller{..}, obstacleCount, tree) myname Camera{..} clientState = do
   lift $ do
@@ -125,15 +129,15 @@ onDisplay (Controller{..}, obstacleCount, tree) myname Camera{..} clientState = 
     rotateRadians cam_xrot $ Vector3 1 0 0
     rotateRadians cam_yrot $ Vector3 0 1 0
 
-  whenJust (Map.lookup myname players) $ \(me:_) → do
+  whenJust (Map.lookup myname players >>= birth) $ \me → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
-  drawPlayers (head . players)
+  drawPlayers (Map.mapMaybe birth players)
   drawObstacles obstacleCount
   lift $ lighting $= Disabled
-  --lift $ drawFutures players
+  lift $ drawFutures players
   --drawTree tree
   drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
-  drawRopes (head . players)
+  drawRopes (Map.mapMaybe birth players)
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
   drawCrossHairs clientState
@@ -195,7 +199,7 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
   cameraRef ← newIORef $ Camera cam_init_dist 0 pi
   stateRef ← newIORef initialState
 
-  -- lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
+  lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
 
   GLUT.reshapeCallback $= Just (onReshape camConf)
 
@@ -205,10 +209,10 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
     state@(Controller{..}, _, _) ← readIORef stateRef
     runReaderT (onDisplay state name camera clientState) context
 
-    -- new ← getMonotonicMilliSecs
-    -- old ← readIORef lastDisplayTime
-    -- putStrLn $ show ((1000 :: Double) / fromIntegral (new - old)) ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
-    -- writeIORef lastDisplayTime new
+    new ← getMonotonicMilliSecs
+    old ← readIORef lastDisplayTime
+    print $ round $ (1000 :: Double) / fromIntegral (new - old) -- ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
+    writeIORef lastDisplayTime new
   GLUT.keyboardMouseCallback $= Just (\x y z w → do
     (c, o, tree) <- readIORef stateRef
     c' <- onInput guiConfig clientStateRef pauseRef cameraRef cursorPos x y z w c
@@ -365,7 +369,7 @@ drawPlayers players = do
 drawFutures :: Players → IO ()
 drawFutures players = do
   GLUT.color green
-  forM_ (Map.elems players) $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov . rayOrigin . body) . take 500
+  forM_ (Map.elems players) $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov . rayOrigin . body) . take 500 . moments
 
 -- Entry point:
 
@@ -453,9 +457,9 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig s
     -- errs ← get errors
     -- print $ "[" ++ (show errs) ++ "]"
   
-  case Map.lookup myname $ players controller of
+  case Map.lookup myname (players controller) >>= birth of
     Nothing → return state
-    Just (player@Player{..}:_) → do
+    Just player@Player{..} → do
       Camera{..} ← readIORef cameraRef
 
       let cam_pos = rayOrigin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)

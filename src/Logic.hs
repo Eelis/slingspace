@@ -10,6 +10,7 @@ module Logic
   , SerializablePlayer(..)
   , update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
+  , Life(..), lifeAfter, moments
   , toFloor
   ) where
 
@@ -46,15 +47,14 @@ data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
 
 data Gun = LeftGun | RightGun deriving (Read, Show, Ord, Eq, Enum)
 
-data SerializablePlayer = SerializablePlayer !Ray (Map Gun Rope) Bool deriving (Read, Show)
+data SerializablePlayer = SerializablePlayer !Ray (Map Gun Rope) deriving (Read, Show)
 
 data Player = Player
   { body :: !Ray
-  , guns :: Map Gun Rope
-  , dead :: Bool }
+  , guns :: Map Gun Rope } -- todo: more appropriate data structure..
 
 update_player :: Player → SerializablePlayer → Player
-update_player p (SerializablePlayer x y z) = p { body = x, guns = y, dead = z }
+update_player p (SerializablePlayer x y) = p { body = x, guns = y }
 
 serialize_player :: Player → SerializablePlayer
 serialize_player = error "broken" -- (Player x y z _) = SerializablePlayer x y z
@@ -76,16 +76,18 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-tickPlayer :: Octree.CubeBox GeometricObstacle → GameplayConfig → Player → Player
-tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
-    { body = newBody, guns = tickGun . guns {-, dead = isJust collision-} }
+type Tree = Octree.CubeBox GeometricObstacle
+
+tickPlayer :: Tree → GameplayConfig → Player → Either V Player
+tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
+    case collisionPos of
+      Just cp -> Left cp
+      Nothing -> Right $ Player{ body = newBody, guns = tickGun . guns }
   where
     Vector3 _ oldy _ = rayOrigin
     tickGun r@(Rope _ 0) = r
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
-    newBody
-      | Just d ← collisionPos = Ray d (Vector3 0 0 0)
-      | otherwise = Ray
+    newBody = Ray
         (rayOrigin <+> rayDirection)
         ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns)) <*> friction cfg)
     collisionPos
@@ -97,13 +99,27 @@ tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-find_target :: Octree.CubeBox GeometricObstacle → Player → GameplayConfig → Ray → Maybe V
+find_target :: Tree → Player → GameplayConfig → Ray → Maybe V
 find_target tree player GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
   (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where
     filteredObstacles = Octree.query longGunRay tree
     longGunRay = Ray gunOrigin (gunDirection <*> shooting_range) -- todo
+
+data Life = Life Player Life | Death V
+
+moments :: Life -> [Player]
+moments (Death _) = []
+moments (Life p l) = p : moments l
+
+life :: Tree → GameplayConfig -> Player -> Life
+life tree cfg = go
+  where go p = Life p (either Death go $ tickPlayer tree cfg p)
+
+lifeAfter :: Tree → GameplayConfig -> Player -> Life
+lifeAfter tree cfg = go
+  where go p = either Death (\q -> Life q (go q)) $ tickPlayer tree cfg p
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z

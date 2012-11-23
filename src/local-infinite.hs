@@ -2,15 +2,16 @@
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, tickPlayer)
+import Logic (Player(..), release, fire, tickPlayer, GameplayConfig, Life(..), lifeAfter)
 import qualified Data.Map as Map
-import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), Cube(..))
+import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), Cube(..), V)
 import MyGL ()
 import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..), Color3(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRandIO)
+import Control.DeepSeq (deepseq)
 import qualified TerrainGenerator
 import qualified Octree
 
@@ -31,21 +32,25 @@ main = do
 
   gtunnel :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tu_cfg)
 
-  --print (length (show gtunnel))
-  let tree = Octree.fromList (Cube (Vector3 (-mega) (-mega) (-mega)) twomega) gtunnel
-  --print $ snd tree
-
   let
+    tree = Octree.fromList (Cube (Vector3 (-mega) (-mega) (-mega)) twomega) gtunnel
     atunnel = TerrainGenerator.flatten (map visualize gtunnel)
     initialPosition = Vector3 0 1800 (-2000)
-    initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
-    path = iterate (tickPlayer tree gp_cfg)
+    initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
+    path = lifeAfter tree gp_cfg
+    path' p = (p, path p)
 
-    makeController :: [Player] -> Gui.Controller
-    makeController p = Gui.Controller
-      { players = Map.singleton name p
-      , tick = return (Nothing, makeController $ tail p)
-      , release = \g -> makeController $ path $ release g $ head p
-      , fire = \g v -> makeController $ path $ fire gp_cfg g v $ head p }
+    makeController :: (Player, Life) -> Gui.Controller
+    makeController (p, l) = Gui.Controller
+      { players = Map.singleton name (Life p l)
+      , tick = return (Nothing, case l of
+        Death v ->
+          let phoenix = p{body=Ray v (Vector3 0 0 0)}
+          in makeController (path' phoenix)
+        Life p' l' -> makeController (p', l'))
+      , release = \g -> makeController $ path' $ release g p
+      , fire = \g v -> makeController $ path' $ fire gp_cfg g v p }
 
-  gui (makeController $ path initialPlayer) (atunnel, tree) name gp_cfg
+  deepseq tree $ do
+
+  gui (makeController (path' initialPlayer)) (atunnel, tree) name gp_cfg
