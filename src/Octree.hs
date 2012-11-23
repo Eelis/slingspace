@@ -1,8 +1,8 @@
-{-# LANGUAGE RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards #-}
+{-# LANGUAGE RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns #-}
 
 module Octree (Box, CubeBox, empty, query, insert, toList, fromList) where
 
-import Graphics.Rendering.OpenGL.GL (Vector3(..))
+import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble)
 import Math (Collision(collision), FitsInCube(fitsInCube), Cube(..), (<*>), (<+>))
 import MyUtil (orElse)
 
@@ -10,7 +10,7 @@ import MyUtil (orElse)
 
 type Subs a = [Maybe (Box a)]
 
-subIds :: [Vector3 Int]
+subIds :: [Vector3 GLdouble]
 subIds = 
   [ Vector3 0 0 0
   , Vector3 0 0 1
@@ -59,17 +59,15 @@ emptyBox :: Box a
 emptyBox = Box [] emptySubs
 
 empty :: Cube -> CubeBox a
-empty c = (c, emptyBox)
-
-
-subCube :: Cube -> Vector3 Int -> Cube
-subCube Cube{..} i = Cube (cubeCorner <+> (i <*> subOff)) subSize
-  where
-    subOff = cubeSize `div` 3
-    subSize = subOff * 2
+empty !c = (c, emptyBox)
 
 subCubes :: Cube -> [Cube]
-subCubes cube = map (subCube cube) subIds
+subCubes Cube{..} = [Cube (cubeCorner <+> (i <*> subOff)) subSize | i <- subIds ]
+  where
+    subOff = cubeSize / 3
+    subSize = subOff * 2
+
+{-# INLINE subCubes #-}
 
 doInsert :: FitsInCube a => a -> Cube -> Maybe (Box a) -> Maybe (Box a)
 doInsert obj cube mb
@@ -92,7 +90,7 @@ fromList :: (Show a, FitsInCube a) => Cube -> [a] -> CubeBox a
 fromList c = foldl insert (empty c)
 
 doQuery :: Collision q Cube Bool => q -> Cube -> Box a -> [a]
-doQuery q cube@Cube{..} Box{..}
+doQuery q !cube@Cube{..} !Box{..}
   | not (collision q cube) = []
   | otherwise = objects ++ concatMap f (zip (subCubes cube) subs)
   where

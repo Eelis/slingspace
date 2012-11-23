@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, MultiWayIf, PatternGuards #-}
 
 module Math where
 
@@ -9,8 +9,11 @@ import Control.Monad
 import MyUtil ((.), tupleToList)
 import Data.Function (on)
 import Data.List (minimumBy)
+import Data.Either (partitionEithers)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Monad.Random (Random(..), MonadRandom(..), runRand)
+
+import Debug.Trace (trace)
 
 -- RANDOM STUFF
 
@@ -115,7 +118,7 @@ newtype OriginRay = OriginRay V
 data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
 data Plane = Plane { planeNormal, planePoint :: !V }
 data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Read, Show)
-data Cube = Cube { cubeCorner :: Vector3 Int, cubeSize :: Int } deriving (Read, Show)
+data Cube = Cube { cubeCorner :: !(Vector3 GLdouble), cubeSize :: !GLdouble } deriving (Read, Show)
 
 plane :: AnnotatedTriangle → Plane
 plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
@@ -123,14 +126,14 @@ plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 class FitsInCube o where fitsInCube :: o -> Cube -> Bool
 
 instance FitsInCube (Vector3 GLdouble) where
-  fitsInCube (Vector3 x y z) (Cube (Vector3 (fromIntegral -> a) (fromIntegral -> b) (fromIntegral -> c)) (fromIntegral -> cubeSize)) =
+  fitsInCube !(Vector3 x y z) !(Cube (Vector3 a b c) cubeSize) =
     a <= x && x <= a + cubeSize &&
     b <= y && y <= b + cubeSize &&
     c <= z && z <= c + cubeSize
       -- todo: this is fugly
 
 instance FitsInCube Sphere where
-  fitsInCube Sphere{..} c =
+  fitsInCube !Sphere{..} c =
     fitsInCube (sphereCenter <+> Vector3 radius radius radius) c &&
     fitsInCube (sphereCenter <-> Vector3 radius radius radius) c
     where radius = sqrt sphereSquaredRadius
@@ -139,27 +142,22 @@ instance FitsInCube GeometricObstacle where
   fitsInCube = fitsInCube . obstacleSphere
 
 sortPair :: Ord a => (a, a) -> (a, a)
-sortPair (x, y) = (min x y, max x y)
+sortPair !p@(x, y)
+  | x <= y = p
+  | otherwise = (y, x)
 
 inRange :: Ord a => a -> Range a -> Bool
-inRange x (a, b) = a <= x && x <= b
+inRange x !(a, b) = a <= x && x <= b
 
 st :: (Fractional a, Ord a) => a -> a -> Range a -> Either Bool (a, a)
-st p v range@(lo, hi)
+st !p !v !range@(lo, hi)
   | abs v <= 0.0001 = Left $ inRange p range
   | otherwise = Right $ sortPair ((lo - p) / v, (hi - p) / v)
-
-data Dimension = X | Y | Z
-
-component :: Dimension -> Vector3 a -> a
-component X (Vector3 v _ _) = v
-component Y (Vector3 _ v _) = v
-component Z (Vector3 _ _ v) = v
 
 type Range a = (a, a) -- invariant: fst <= snd
 
 intersectRanges :: Ord a => Range a -> Range a -> Maybe (Range a)
-intersectRanges (lo, hi) (lo', hi')
+intersectRanges !(lo, hi) !(lo', hi')
   | lo'' <= hi'' = Just r
   | otherwise = Nothing
   where r@(lo'', hi'') = (max lo lo', min hi hi')
@@ -167,22 +165,33 @@ intersectRanges (lo, hi) (lo', hi')
 
 class Collision a b c | a b → c where collision :: a → b → c
 
+instance Collision (Vector3 GLdouble) Cube Bool where
+  collision !(Vector3 x y z) !Cube{cubeCorner=Vector3 a b c, cubeSize} =
+    inRange x (a, a + cubeSize) &&
+    inRange y (b, b + cubeSize) &&
+    inRange z (c, c + cubeSize)
+
 instance Collision Ray Cube Bool where
-  collision Ray{..} Cube{..} = foldl f (Right (0, 1)) (map i [X, Y, Z]) /= Left False
+  collision
+    !Ray{rayOrigin=rayOrigin@(Vector3 rox roy roz), rayDirection=rayDirection@(Vector3 rdx rdy rdz)}
+    !cube@Cube{cubeCorner=Vector3 ccx ccy ccz,..} =
+      if
+        | (rox <= ccx && rex <= ccx) || (cex <= rox && cex <= rex) ||
+          (roy <= ccy && rey <= ccy) || (cey <= roy && cey <= rey) ||
+          (roz <= ccz && rez <= ccz) || (cez <= roz && cez <= rez) -> False
+        | collision rayOrigin cube && collision (rayOrigin <+> rayDirection) cube -> True
+        | otherwise -> and bs && (null rs || maximum (0 : map fst rs) <= minimum (1 : map snd rs))
     where
-      i :: Dimension -> Either Bool (Range GLdouble)
-      i d = st (component d rayOrigin) (component d rayDirection)
-          (fromIntegral $ component d cubeCorner, fromIntegral $ component d cubeCorner + cubeSize)
-      f (Left True) b = b
-      f a@(Left False) _ = a
-      f a (Left True) = a
-      f _ b@(Left False) = b
-      f (Right r) (Right r') = case intersectRanges r r' of
-        Just r'' -> Right r''
-        Nothing -> Left False
+      rayEnd@(Vector3 rex rey rez) = rayOrigin <+> rayDirection
+      cubeOppCorner@(Vector3 cex cey cez) = Vector3 (ccx + cubeSize) (ccy + cubeSize) (ccz + cubeSize)
+      (bs, rs) = partitionEithers [iX, iY, iZ]
+      rs' = (0, 1) : rs
+      iX = st rox rdx (ccx, cex)
+      iY = st roy rdy (ccy, cey)
+      iZ = st roz rdz (ccz, cez)
 
 instance Collision Ray Sphere Bool where
-  collision !Ray{..} Sphere{..} = b*b - 4*a*c >= 0
+  collision !Ray{..} !Sphere{..} = b*b - 4*a*c >= 0
     where
       a = inner_prod rayDirection rayDirection
       b = 2 * inner_prod rayDirection o

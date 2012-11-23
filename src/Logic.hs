@@ -19,7 +19,6 @@ import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
 import MyGL ()
 import MyUtil ((.))
-import TupleProjection (project)
 import Prelude hiding ((.))
 import qualified Octree
 
@@ -91,7 +90,7 @@ tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} = if dead then p else p
         ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns)) <*> friction cfg)
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
-      | otherwise = $(project 1) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
+      | otherwise = (\(_, x, _) -> x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
     filteredObstacles = Octree.query body tree
 
 move :: V → Player → Player
@@ -99,7 +98,7 @@ move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
 find_target :: Octree.CubeBox GeometricObstacle → Player → GameplayConfig → Ray → Maybe V
 find_target tree player lcfg@GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
-  $(project 1) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
+  (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where
     filteredObstacles = Octree.query longGunRay tree

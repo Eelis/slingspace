@@ -7,7 +7,7 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, AnnotatedTriangle(..), normalize_v, Ray(..), GeometricObstacle)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle)
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -128,7 +128,7 @@ onDisplay (Controller{..}, obstacleCount, _) myname Camera{..} clientState = do
   drawPlayers (head . players)
   drawObstacles obstacleCount
   lift $ lighting $= Disabled
-  --lift $ drawFutures players
+  lift $ drawFutures players
   drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
   drawRopes (head . players)
   --drawOrientation (head . players)
@@ -190,7 +190,7 @@ setupCallbacks initialState clientStateRef name gameplayConfig = do
 
   pauseRef ← newIORef True
   cursorPos ← newIORef $ Position 0 0
-  cameraRef ← newIORef $ Camera cam_init_dist 0 0
+  cameraRef ← newIORef $ Camera cam_init_dist 0 pi
   stateRef ← newIORef initialState
 
   -- lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
@@ -342,6 +342,7 @@ drawPlayers players = do
   GLUT.materialAmbient Front $= ball_material_ambient
   GLUT.materialDiffuse Front $= ball_material_diffuse
   forM players $ \Player{..} → GLUT.preservingMatrix $ do
+    --print (rayOrigin body)
     GLUT.translate $ rayOrigin body
     GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
   return ()

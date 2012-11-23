@@ -10,7 +10,6 @@ import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..), Color3(..))
 import Obstacles (infinite_tunnel)
 import Prelude hiding ((.))
-import TupleProjection (project)
 import Control.Monad.Random (evalRandIO)
 import qualified TerrainGenerator
 import qualified Octree
@@ -30,7 +29,7 @@ main = do
   tu_cfg ← read_config_file "infinite-tunnel.txt"
   gp_cfg ← read_config_file "gameplay.txt"
 
-  gtunnel :: [GeometricObstacle] ← take 1000 . ($(project 2) .) . evalRandIO (infinite_tunnel tu_cfg)
+  gtunnel :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tu_cfg)
 
   --print (length (show gtunnel))
   let tree = Octree.fromList (Cube (Vector3 (-mega) (-mega) (-mega)) twomega) gtunnel
@@ -38,7 +37,7 @@ main = do
 
   let
     atunnel = TerrainGenerator.flatten (map visualize gtunnel)
-    initialPosition = (Vector3 0 1800 1000)
+    initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty False
     path = iterate (tickPlayer tree gp_cfg)
 
