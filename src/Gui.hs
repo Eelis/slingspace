@@ -1,39 +1,40 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns #-}
 
-module Gui (Controller(..), State, gui) where
+module Gui (Controller(..), gui) where
 
 import Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Graphics.UI.GLUT as GLUT
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
-import Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, Cube(..))
-import Data.Maybe (isJust, listToMaybe)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex)
+import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Control.Monad (foldM)
-import Logic (Player(..), Gun(..), GameplayConfig(..), Rope(..), find_target, toFloor, Life(..), moments)
+import Logic (Player(Player,body), Gun(..), GameplayConfig(..), Rope(..), findTarget, Life(..), moments, birth)
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
-import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, tupleToList, whenJust)
-import Prelude hiding ((.))
+import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, whenJust)
+import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
-import TerrainGenerator (StoredVertex, trianglesPerObstacle, verticesPerTriangle)
 import Foreign.Storable (sizeOf)
+import Data.Traversable (mapM)
 
 import qualified Octree
+import qualified Logic
+import qualified TerrainGenerator
 import qualified Data.StorableVector as SV
 import qualified Data.StorableVector.Pointer as SVP
-import qualified TerrainGenerator
+import qualified Data.Map as Map
+import qualified Graphics.UI.GLUT as GLUT
+import qualified Control.Monad.State as CMS
 
 deriving instance Read Key
 deriving instance Read KeyState
 deriving instance Read MouseButton
 deriving instance Read GLUT.SpecialKey
 
--- Configuration:
+-- Static data:
 
 data Scheme = Scheme
   { shadow_color :: Color4 GLclampf
@@ -47,17 +48,12 @@ data Scheme = Scheme
   , ballLight_attenuation :: (GLfloat, GLfloat, GLfloat)
   } deriving Read
 
-gunColor :: Scheme → Gun → Color4 GLclampf
-  -- We don't use this function type in Scheme itself because then we can't derive Read.
-gunColor Scheme{..} LeftGun = left_gun_color
-gunColor Scheme{..} RightGun = right_gun_color
-
 data GridType =
   DottedGrid { grid_dot_size :: GLfloat } |
   LinedGrid { grid_line_width :: GLfloat }
     deriving Read
 
-data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } | Shadows deriving Read
+data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } {-| Shadows-} deriving Read
 
 data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
@@ -81,45 +77,63 @@ data GuiConfig = GuiConfig
   , restart_key, pause_key, exit_key, zoom_in_key, zoom_out_key :: (Key, KeyState)
   } deriving Read
 
-gunGuiConfig :: GuiConfig → Gun → GunGuiConfig
-gunGuiConfig cf LeftGun = GunGuiConfig (- cross_offset_ver cf) (- cross_offset_hor cf)
-gunGuiConfig cf RightGun = GunGuiConfig (- cross_offset_ver cf) (cross_offset_hor cf)
+data Static = Static
+  { obstacleBuffer :: GLUT.BufferObject
+  , scheme :: Scheme
+  , guiConfig :: GuiConfig
+  , gameplayConfig :: GameplayConfig }
 
-tickDurationMilliSecs :: Integer
-tickDurationMilliSecs = 10  -- Todo: Make configurable.
+type Gui = ReaderT Static IO
 
--- State:
+-- Dynamic data:
 
-data Camera = Camera { cam_dist, cam_xrot, cam_yrot :: !GLdouble }
-data FireState = FireAsap | Fired | Idle
-data ClientGunState = ClientGunState { target :: Maybe V, fire_state :: FireState }
-type ClientState = Map Gun ClientGunState
+data CameraOrientation = CameraOrientation { cam_dist, cam_xrot, cam_yrot :: !GLdouble }
+data FireState = FireAsap | ReleaseAsap | Fired | Idle
+data ClientGunState = ClientGunState { target :: Maybe V, fireState :: FireState }
+type Guns = Map Gun ClientGunState
 type Players = Map String Life
-type ObstacleCount = Int
 type Tree = Octree.CubeBox GeometricObstacle
-type State = (Controller, ObstacleCount, Tree)
-type ObstacleUpdate = (SV.Vector StoredVertex, Tree)
 
+data State = State
+  { controller :: Controller
+  , paused :: Bool
+  , camera :: CameraOrientation
+  , guns :: Guns
+  , obstacleCount :: Int
+  , tree :: Tree }
+
+type ObstacleUpdate = (SV.Vector StoredVertex, Tree)
 
 data Controller = Controller
   { players :: Players
   , tick :: IO (Maybe ObstacleUpdate, Controller)
-  , release :: Gun → Controller
-  , fire :: Gun → V → Controller }
+  , release :: Gun → Maybe Controller
+  , fire :: Gun → V → Maybe Controller }
+  -- release and fire return Maybes so that the controller can say "nope, you can't release/fire now"
 
-initialClientState :: ClientState
-initialClientState = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
 
--- Callbacks:
 
-data GuiContext = GuiContext { obstacleBuffer :: GLUT.BufferObject, scheme :: Scheme, guiConfig :: GuiConfig }
-type Gui = ReaderT GuiContext IO
 
-birth :: Life -> Maybe Player -- Nothing if stillborn
-birth = listToMaybe . moments
 
-onDisplay :: State → String → Camera → ClientState → Gui ()
-onDisplay (Controller{..}, obstacleCount, tree) myname Camera{..} clientState = do
+
+gunColor :: Scheme → Gun → Color4 GLclampf
+  -- We don't use this function type in Scheme itself because then we can't derive Read.
+gunColor Scheme{..} LeftGun = left_gun_color
+gunColor Scheme{..} RightGun = right_gun_color
+
+gunGuiConfig :: GuiConfig → Gun → GunGuiConfig
+gunGuiConfig GuiConfig{..} g =
+  GunGuiConfig (- cross_offset_ver) ((case g of LeftGun -> -1; RightGun -> 1) * cross_offset_hor)
+
+
+tickDurationMilliSecs :: Integer
+tickDurationMilliSecs = 10  -- Todo: Make configurable.
+
+initialGuns :: Guns
+initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
+
+onDisplay :: State → String → Gui ()
+onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myname = do
   lift $ do
     GLUT.clear [ColorBuffer, DepthBuffer]
     GLUT.loadIdentity
@@ -134,13 +148,13 @@ onDisplay (Controller{..}, obstacleCount, tree) myname Camera{..} clientState = 
   drawPlayers (Map.mapMaybe birth players)
   drawObstacles obstacleCount
   lift $ lighting $= Disabled
-  lift $ drawFutures players
+  --lift $ drawFutures players
   --drawTree tree
   drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
   drawRopes (Map.mapMaybe birth players)
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
-  drawCrossHairs clientState
+  drawCrossHairs guns
   lift swapBuffers
 
 onReshape :: CameraConfig → GLUT.Size → IO ()
@@ -151,77 +165,81 @@ onReshape CameraConfig{..} s@(GLUT.Size w h) = do
   GLUT.perspective fov (fromIntegral w / fromIntegral h) 0.1 viewing_dist
   GLUT.matrixMode $= GLUT.Modelview 0
 
-onInput :: GuiConfig → IORef ClientState → IORef Bool → IORef Camera → IORef Position → Key → KeyState → a → b → Controller → IO Controller
-onInput GuiConfig{camConf=camConf@CameraConfig{..}, ..} clientStateRef pauseRef cameraRef cursorPos b bs _ _ controller@Controller{..} =
-  case () of
-    _| k == pause_key → togglePause camConf pauseRef cameraRef cursorPos >> return controller
-    _| k == exit_key → exitWith ExitSuccess
-    _| k == zoom_in_key → do
-      modifyIORef cameraRef $ \cam → cam { cam_dist = max (cam_dist cam / cam_zoom_speed) cam_min_dist }
-      return controller
-    _| k == zoom_out_key → do
-      modifyIORef cameraRef $ \cam → cam { cam_dist = min (cam_dist cam * cam_zoom_speed) cam_max_dist }
-      return controller
-    _| otherwise → case (b, bs) of
-     (MouseButton LeftButton, Down) → do fire_asap_a LeftGun; return controller
-     (MouseButton LeftButton, Up) → release_a LeftGun
-     (MouseButton MiddleButton, Down) → do fire_asap_a RightGun; return controller
-     (MouseButton MiddleButton, Up) → release_a RightGun
-     (MouseButton RightButton, Down) → do fire_asap_a RightGun; return controller
-     (MouseButton RightButton, Up) → release_a RightGun
-     _ → return controller
- where
-  k = (b, bs)
-  fire_asap_a = modifyIORef clientStateRef . Map.adjust (\g → g { fire_state = FireAsap })
-  release_a u = do
-    modifyIORef clientStateRef (Map.adjust (\g → g { fire_state = Idle }) u)
-    return $ release u
+gunForButton :: MouseButton -> Gun
+gunForButton LeftButton = LeftGun
+gunForButton _ = RightGun
 
-onMotion :: CameraConfig → IORef Camera → IORef Position → Position → IO ()
-onMotion CameraConfig{..} cameraRef cursorPosRef p@(Position x y) = do
+fireStateForKeyState :: KeyState → FireState
+fireStateForKeyState Down = FireAsap
+fireStateForKeyState Up = ReleaseAsap
+
+onInput :: GuiConfig → Key → KeyState → State → Maybe State
+onInput
+    GuiConfig{camConf=CameraConfig{..}, ..}
+    b bs state@State{controller=Controller{..}, ..} = do
+  case () of
+    _| k == pause_key → Just state{paused=not paused}
+    _| k == exit_key → Nothing
+    _| k == zoom_in_key →
+      Just state{camera=camera{ cam_dist = max (cam_dist camera / cam_zoom_speed) cam_min_dist }}
+    _| k == zoom_out_key →
+      Just state{camera=camera{ cam_dist = min (cam_dist camera * cam_zoom_speed) cam_max_dist }}
+    _| MouseButton button ← b → do
+      Just state{guns=Map.adjust (\gs → gs { fireState = fireStateForKeyState bs }) (gunForButton button) guns}
+    _ → Just state
+ where k = (b, bs)
+
+onMotion :: CameraConfig → CameraOrientation → IORef Position → Position → IO CameraOrientation
+onMotion CameraConfig{..} c@CameraOrientation{..} cursorPosRef p@(Position x y) = do
   Position x' y' ← readIORef cursorPosRef
   let q = Position (wrap x 100 400) (wrap y 100 400) -- Todo: This is no good.
   writeIORef cursorPosRef q
   when (q /= p) $ GLUT.pointerPosition $= q
-  when (abs (x - x') + abs (y - y') < 200) $ do
-  modifyIORef cameraRef (\c@Camera{..} → c {
-    cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral (y' - y) / mouse_speed),
-    cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed })
+  return $ if abs (x - x') + abs (y - y') < 200
+    then c {
+      cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral (y' - y) / mouse_speed),
+      cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed }
+    else c
 
-setupCallbacks :: State → IORef ClientState → String → GameplayConfig → Gui ()
-setupCallbacks initialState clientStateRef name gameplayConfig = do
-  context@GuiContext
+setupCallbacks :: State → String → Gui ()
+setupCallbacks initialState name = do
+  context@Static
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
   lift $ do
 
-  pauseRef ← newIORef True
   cursorPos ← newIORef $ Position 0 0
-  cameraRef ← newIORef $ Camera cam_init_dist 0 pi
   stateRef ← newIORef initialState
 
-  lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
+  --lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
 
   GLUT.reshapeCallback $= Just (onReshape camConf)
 
   GLUT.displayCallback $= do
-    camera ← readIORef cameraRef
-    clientState ← readIORef clientStateRef
-    state@(Controller{..}, _, _) ← readIORef stateRef
-    runReaderT (onDisplay state name camera clientState) context
+    state ← readIORef stateRef
+    runReaderT (onDisplay state name) context
 
-    new ← getMonotonicMilliSecs
-    old ← readIORef lastDisplayTime
-    print $ round $ (1000 :: Double) / fromIntegral (new - old) -- ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
-    writeIORef lastDisplayTime new
-  GLUT.keyboardMouseCallback $= Just (\x y z w → do
-    (c, o, tree) <- readIORef stateRef
-    c' <- onInput guiConfig clientStateRef pauseRef cameraRef cursorPos x y z w c
-    writeIORef stateRef (c', o, tree))
+    --new ← getMonotonicMilliSecs
+    --old ← readIORef lastDisplayTime
+    --print $ round $ (1000 :: Double) / fromIntegral (new - old) -- ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
+    --writeIORef lastDisplayTime new
+  GLUT.keyboardMouseCallback $= Just (\x y _ _ → do
+    s <- readIORef stateRef
+    newState <- maybe (exitWith ExitSuccess) return (onInput guiConfig x y s)
+    writeIORef stateRef newState
+    when (paused s /= paused newState) $ do
+      let
+        (cursor, mc) = if paused newState then (GLUT.Inherit, Nothing) else (GLUT.None, Just $ \qq → do
+          state <- readIORef stateRef
+          newCam <- onMotion camConf (camera state) cursorPos qq
+          writeIORef stateRef $ state{camera=newCam})
+      GLUT.cursor $= cursor
+      GLUT.motionCallback $= mc
+      GLUT.passiveMotionCallback $= mc)
 
   (getMonotonicMilliSecs >>=) $ fix $ \self next → do
-    state ← readIORef stateRef >>=
-      guiTick context pauseRef cameraRef clientStateRef name gameplayConfig
-    writeIORef stateRef state
+    state <- readIORef stateRef
+    newState ← runReaderT (guiTick name state) context
+    writeIORef stateRef newState
     tn ← getMonotonicMilliSecs
     let next' = next + tickDurationMilliSecs
     if tn >= next
@@ -280,14 +298,14 @@ drawTree = lift . renderPrimitive Lines . go Nothing
         Nothing -> return ()
         Just p -> mapM_ (vertex . tov) [center, p]
 
-drawCrossHairs :: ClientState → Gui ()
-drawCrossHairs clientState = do
+drawCrossHairs :: Guns → Gui ()
+drawCrossHairs guns = do
   scheme ← asks scheme
   guiConfig ← asks guiConfig
   lift $ do
   GLUT.lineWidth $= 3
   GLUT.pointSize $= 4
-  forM_ (Map.toList clientState) $ \(g, gu) → do
+  forM_ (Map.toList guns) $ \(g, gu) → do
     let GunGuiConfig{..} = gunGuiConfig guiConfig g
     GLUT.color $ gunColor scheme g
     GLUT.loadIdentity
@@ -306,8 +324,8 @@ drawRopes players = do
   GuiConfig{..} ← asks guiConfig
   lift $ do
   GLUT.lineWidth $= rope_line_width
-  renderPrimitive Lines $ forM players $ \Player{..} →
-    forM_ (Map.toList guns) $ \(gun, Rope{..}) → do
+  renderPrimitive Lines $ forM players $ \player@Player{..} →
+    forM_ (Map.toList (Logic.guns player)) $ \(gun, Rope{..}) → do
         GLUT.color $ gunColor scheme gun
         vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
@@ -328,7 +346,7 @@ drawOrientation players = do
 
 drawObstacles :: Int → Gui ()
 drawObstacles obstacleCount = do
-  GuiContext{scheme=Scheme{..}, ..} ← ask
+  Static{scheme=Scheme{..}, ..} ← ask
   lift $ do
   
   GLUT.materialDiffuse Front $= Color4 1 1 1 1
@@ -376,13 +394,19 @@ drawFutures players = do
 gui :: Controller → ObstacleUpdate → String → GameplayConfig → IO ()
 gui controller (storedObstacles, tree) name gameplayConfig = do
 
-  let obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
-
   guiConfig@GuiConfig{..} :: GuiConfig
     ← read_config_file "gui.txt"
   scheme@Scheme{..} :: Scheme
     ← read . (readFile =<< (++ "/" ++ schemeFile) . getDataFileName "schemes")
-  clientState ← newIORef initialClientState
+
+  let
+    initialState = State
+      { controller = controller
+      , paused = True
+      , camera = CameraOrientation (cam_init_dist camConf) 0 pi
+      , guns = initialGuns
+      , obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
+      , tree = tree }
 
   GLUT.getArgsAndInitialize
 
@@ -423,35 +447,43 @@ gui controller (storedObstacles, tree) name gameplayConfig = do
   GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
 
   [obstacleBuffer] ← GLUT.genObjectNames 1
-  let size = fromIntegral obstacleCount * TerrainGenerator.bytesPerObstacle
+  let size = fromIntegral (obstacleCount initialState) * TerrainGenerator.bytesPerObstacle
   GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
   GLUT.bufferData GLUT.ArrayBuffer $= (size, nullPtr, GLUT.DynamicDraw)
   GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0 size (SVP.ptr (SVP.cons storedObstacles))
     -- todo: merge into one
   GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
 
-  runReaderT (setupCallbacks (controller, obstacleCount, tree) clientState name gameplayConfig) GuiContext{..}
-
+  runReaderT (setupCallbacks initialState name) Static{..}
   GLUT.mainLoop
 
--- Logic:
+f :: Static -> CameraOrientation -> Tree -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
+f Static{..} o tree playerPos g ClientGunState{..} = do
+    c <- CMS.get
+    newFireState <- case (newTarget, fireState) of
+      (Just t, FireAsap) | Just c' <- fire c g t → CMS.put c' >> return Fired
+      (_, ReleaseAsap) | Just c' <- release c g → CMS.put c' >> return Idle
+      (_, s) -> return s
+    return ClientGunState{target=newTarget, fireState=newFireState}
+  where
+    newTarget = findTarget tree playerPos gameplayConfig $ cameraRay o playerPos (gunGuiConfig guiConfig g)
 
-togglePause :: CameraConfig → IORef Bool → IORef Camera → IORef Position → IO ()
-togglePause cam_conf pauseRef cameraRef cursorPosRef = do
-  p ← readIORef pauseRef
-  writeIORef pauseRef $ not p
-  let
-    (c, mc) = if p then (GLUT.None, Just $ \qq → do
-    onMotion cam_conf cameraRef cursorPosRef qq) else (GLUT.Inherit, Nothing)
-  GLUT.cursor $= c
-  GLUT.motionCallback $= mc
-  GLUT.passiveMotionCallback $= mc
+cameraDirection :: CameraOrientation -> GunGuiConfig -> V
+cameraDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
+  `x_rot_vector` (gun_xrot + cam_xrot)
+  `y_rot_vector` (gun_yrot + cam_yrot)
 
-guiTick :: GuiContext → IORef Bool → IORef Camera → IORef ClientState → String → GameplayConfig → State → IO State
-guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig state@(controller, obstacleCount, tree) = do
-  GLUT.postRedisplay Nothing
+cameraRay :: CameraOrientation -> V -> GunGuiConfig -> Ray
+cameraRay c@CameraOrientation{..} playerPos g = Ray
+  (playerPos <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot))
+  (cameraDirection c g)
 
-  paused ← readIORef pauseRef
+guiTick :: String → State → Gui State
+guiTick myname state@State{..} = do
+  static@Static{..} <- ask
+
+  lift $ GLUT.postRedisplay Nothing
+
   if paused then return state else do
 
     -- errs ← get errors
@@ -459,36 +491,15 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig s
   
   case Map.lookup myname (players controller) >>= birth of
     Nothing → return state
-    Just player@Player{..} → do
-      Camera{..} ← readIORef cameraRef
-
-      let cam_pos = rayOrigin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)
-
-      oldClientState ← readIORef clientStateRef
+    Just Player{body} → do
       let
-        newClientState = flip Map.mapWithKey oldClientState $
-          \(gunGuiConfig guiConfig → GunGuiConfig{..}) g → g { target =
-          find_target tree player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
-            `x_rot_vector` (gun_xrot + cam_xrot)
-            `y_rot_vector` (gun_yrot + cam_yrot) }
-
-      writeIORef clientStateRef newClientState
-
-      newController ← foldM (\gs (k, v) →
-        case v of
-          ClientGunState (Just t) FireAsap → do
-            modifyIORef clientStateRef $ Map.adjust (\g → g { fire_state = Fired }) k
-            return $ fire gs k t
-          _ → return gs)
-          controller
-          (Map.toList newClientState)
-
-      (mx, c) <- tick newController
+        (newGuns, newController) = CMS.runState (Map.traverseWithKey (f static camera tree (rayOrigin body)) guns) controller
+      (mx, c) <- lift $ tick newController
       case mx of
-        Nothing -> return (c, obstacleCount, tree)
+        Nothing -> return state{controller=c, guns=newGuns}
         Just (a, newTree) -> do
           let newObstacleCount = SV.length a `div` TerrainGenerator.verticesPerObstacle
-          GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-          GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0
+          lift $ GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
+          lift $ GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0
               (fromIntegral newObstacleCount * TerrainGenerator.bytesPerObstacle) (SVP.ptr (SVP.cons a))
-          return (c, newObstacleCount, newTree)
+          return state{controller=c, obstacleCount=newObstacleCount, tree=newTree,guns=newGuns}

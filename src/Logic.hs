@@ -3,14 +3,14 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , find_target, fire, release, tickPlayer, move
+  , findTarget, fire, release, tickPlayer, move
   , GameplayConfig(..)
   , Greeting(..)
   , ClientToServerMsg(..), ServerToClientMsg(..)
   , SerializablePlayer(..)
   , update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
-  , Life(..), lifeAfter, moments
+  , Life(..), lifeAfter, moments, lifeExpectancyUpto, birth
   , toFloor
   ) where
 
@@ -20,6 +20,7 @@ import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
 import MyGL ()
 import MyUtil ((.))
+import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
 import qualified Octree
 
@@ -99,9 +100,9 @@ tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-find_target :: Tree → Player → GameplayConfig → Ray → Maybe V
-find_target tree player GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
-  (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd (rayOrigin $ body player) v < square shooting_range)
+findTarget :: Tree → V → GameplayConfig → Ray → Maybe V
+findTarget tree playerPos GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
+  (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where
     filteredObstacles = Octree.query longGunRay tree
@@ -113,13 +114,19 @@ moments :: Life -> [Player]
 moments (Death _) = []
 moments (Life p l) = p : moments l
 
-life :: Tree → GameplayConfig -> Player -> Life
-life tree cfg = go
-  where go p = Life p (either Death go $ tickPlayer tree cfg p)
+lifeExpectancyUpto :: Int -> Life -> Int
+lifeExpectancyUpto m = go 0
+  where
+    go n l
+      | Life _ l' <- l, n /= m = go (n+1) l'
+      | otherwise = n
 
 lifeAfter :: Tree → GameplayConfig -> Player -> Life
 lifeAfter tree cfg = go
   where go p = either Death (\q -> Life q (go q)) $ tickPlayer tree cfg p
+
+birth :: Life -> Maybe Player -- Nothing if stillborn
+birth = listToMaybe . moments
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z

@@ -11,10 +11,13 @@ import Data.Function (on)
 import Data.List (minimumBy)
 import Data.Either (partitionEithers)
 import Data.Maybe (isJust, mapMaybe)
+import Control.Applicative (liftA3)
 import Control.Monad.Random (Random(..), MonadRandom(..), runRand)
 import Control.DeepSeq (NFData)
-
-import Debug.Trace (trace)
+import Foreign.Storable (Storable(..), sizeOf)
+import qualified Foreign.Storable.Record as Store
+import qualified Data.StorableVector as SV
+import Foreign.Storable.Tuple ()
 
 -- RANDOM STUFF
 
@@ -229,6 +232,28 @@ instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GL
       collisions :: [(GLdouble, V, AnnotatedTriangle)]
       collisions = (\(x,(y,z)) → (y,z,x)) . mapMaybe (\triangle → (,) triangle . (ray `collision` triangle)) triangles
 
+data StoredVertex = StoredVertex
+  { storedPosition, storedNormal :: !(Vector3 GLdouble), storedColor :: !(Color3 GLdouble) }
+
+instance Storable StoredVertex where
+  sizeOf = Store.sizeOf storeVertex
+  alignment = Store.alignment storeVertex
+  peek = Store.peek storeVertex
+  poke = Store.poke storeVertex
+
+storeVertex :: Store.Dictionary StoredVertex
+storeVertex = Store.run $ liftA3 StoredVertex
+  (Store.element storedPosition)
+  (Store.element storedNormal)
+  (Store.element storedColor)
+
+flatten :: [VisualObstacle] → SV.Vector StoredVertex
+flatten obstacles = SV.pack $
+  [ StoredVertex vertex triangleNormal obstacleColor
+  | VisualObstacle{..} <- obstacles
+  , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle
+  , vertex ← tupleToList triangleVertices ]
+
 rayThrough :: V → V → Ray
 rayThrough from to = Ray from (to <-> from)
 
@@ -250,6 +275,10 @@ data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
   , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
+
+trianglesPerObstacle, verticesPerTriangle :: Num a => a
+trianglesPerObstacle = 4
+verticesPerTriangle = 3
 
 instance NFData GeometricObstacle
 

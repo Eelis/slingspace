@@ -1,18 +1,18 @@
 {-# LANGUAGE UnicodeSyntax, RecordWildCards, TemplateHaskell, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
-module TerrainGenerator (Cache, start, defaultConfig, flatten, sectorSize, sectorId, SectorId, cubeSize, sectors, totalBytes, bytesPerSector, sectorCenter, StoredVertex(..), trianglesPerObstacle, verticesPerTriangle, bytesPerObstacle, verticesPerObstacle) where
+module TerrainGenerator (Cache, start, defaultConfig, sectorSize, sectorId, SectorId, cubeSize, sectors, totalBytes, bytesPerSector, sectorCenter, trianglesPerObstacle, verticesPerTriangle, bytesPerObstacle, verticesPerObstacle) where
 
 import Data.Function (fix, on)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..), Color3(..))
-import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), AnnotatedTriangle(..), inner_prod)
+import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), inner_prod, trianglesPerObstacle, verticesPerTriangle, StoredVertex, flatten)
 import Data.Bits (xor)
 import Control.Monad (replicateM, liftM3, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
 import Data.List (sortBy)
-import MyUtil ((.), tupleToList)
+import MyUtil ((.))
 import Prelude hiding ((.))
 import Control.DeepSeq (deepseq, NFData(..))
 import qualified Data.StorableVector as SV
@@ -20,20 +20,16 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Map (Map)
 import Data.Set (Set)
-import Control.Applicative (liftA3)
 import Foreign.C.Types (CFloat, CDouble)
 import Foreign.Storable (Storable(..), sizeOf)
-import qualified Foreign.Storable.Record as Store
 import Foreign.Storable.Tuple ()
 
-cubeSize, bytesPerSector, bytesPerVertex, obstaclesPerSector, sectors, trianglesPerObstacle, verticesPerTriangle, verticesPerSector, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle :: Num a ⇒ a
+cubeSize, bytesPerSector, bytesPerVertex, obstaclesPerSector, sectors, verticesPerSector, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle :: Num a ⇒ a
 cubeSize = 7
 sectors = cubeSize^3
 obstaclesPerSector = 50
-trianglesPerObstacle = 4
 verticesPerObstacle = trianglesPerObstacle * verticesPerTriangle
 bytesPerObstacle = trianglesPerObstacle * bytesPerTriangle
-verticesPerTriangle = 3
 bytesPerTriangle = verticesPerTriangle * bytesPerVertex
 verticesPerSector = verticesPerTriangle * trianglesPerObstacle * obstaclesPerSector
 bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
@@ -59,28 +55,6 @@ instance NFData Sector
 
 emptyCache :: Cache
 emptyCache = Map.empty
-
-data StoredVertex = StoredVertex
-  { storedPosition, storedNormal :: !(Vector3 GLdouble), storedColor :: !(Color3 GLdouble) }
-
-instance Storable StoredVertex where
-  sizeOf = Store.sizeOf storeVertex
-  alignment = Store.alignment storeVertex
-  peek = Store.peek storeVertex
-  poke = Store.poke storeVertex
-
-storeVertex :: Store.Dictionary StoredVertex
-storeVertex = Store.run $ liftA3 StoredVertex
-  (Store.element storedPosition)
-  (Store.element storedNormal)
-  (Store.element storedColor)
-
-flatten :: [VisualObstacle] → SV.Vector StoredVertex
-flatten obstacles = SV.pack $
-  [ StoredVertex vertex triangleNormal obstacleColor
-  | VisualObstacle{..} <- obstacles
-  , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle
-  , vertex ← tupleToList triangleVertices ]
 
 sectorCenter :: Config → SectorId → V
 sectorCenter Config{..} = (<*> sectorSize) . (fromInteger .)
