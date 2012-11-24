@@ -153,31 +153,42 @@ sortPair !p@(x, y)
   | otherwise = (y, x)
 
 inRange :: Ord a => a -> Range a -> Bool
-inRange x !(a, b) = a <= x && x <= b
+inRange x !(Range a b) = a <= x && x <= b
 
 st :: (Fractional a, Ord a) => a -> a -> Range a -> Either Bool (a, a)
-st !p !v !range@(lo, hi)
+st !p !v !range@Range{..}
   | abs v <= 0.0001 = Left $ inRange p range
   | otherwise = Right $ sortPair ((lo - p) / v, (hi - p) / v)
 
-type Range a = (a, a) -- invariant: fst <= snd
+data Range a = Range { lo, hi :: !a } -- invariant: lo <= hi
 
-intersectRanges :: Ord a => Range a -> Range a -> Maybe (Range a)
-intersectRanges !(lo, hi) !(lo', hi')
-  | lo'' <= hi'' = Just r
-  | otherwise = Nothing
-  where r@(lo'', hi'') = (max lo lo', min hi hi')
+class Collision a b c | a b → c where
+  collision :: a → b → c
+  collide :: a → b → Bool
 
+instance Ord a => Collision (Range a) (Range a) (Maybe (Range a)) where
+  collide a b = isJust (collision a b)
+  collision !(Range lo hi) !(Range lo' hi')
+    | lo'' <= hi'' = Just $ Range lo'' hi''
+    | otherwise = Nothing
+    where r@(lo'', hi'') = (max lo lo', min hi hi')
 
-class Collision a b c | a b → c where collision :: a → b → c
+instance Collision Cube Cube Bool where -- should really be done for cuboids with a cuboid result
+  collide = collision
+  collision (Cube (Vector3 x y z) s) (Cube (Vector3 x' y' z') s') =
+    collide (Range x (x+s)) (Range x' (x'+s')) &&
+    collide (Range y (y+s)) (Range y' (y'+s')) &&
+    collide (Range z (z+s)) (Range z' (z'+s'))
 
 instance Collision (Vector3 GLdouble) Cube Bool where
+  collide = collision
   collision !(Vector3 x y z) !Cube{cubeCorner=Vector3 a b c, cubeSize} =
-    inRange x (a, a + cubeSize) &&
-    inRange y (b, b + cubeSize) &&
-    inRange z (c, c + cubeSize)
+    inRange x (Range a (a + cubeSize)) &&
+    inRange y (Range b (b + cubeSize)) &&
+    inRange z (Range c (c + cubeSize))
 
 instance Collision Ray Cube Bool where
+  collide = collision
   collision
     !Ray{rayOrigin=rayOrigin@(Vector3 rox roy roz), rayDirection=rayDirection@(Vector3 rdx rdy rdz)}
     !cube@Cube{cubeCorner=Vector3 ccx ccy ccz,..} =
@@ -192,11 +203,12 @@ instance Collision Ray Cube Bool where
       cubeOppCorner@(Vector3 cex cey cez) = Vector3 (ccx + cubeSize) (ccy + cubeSize) (ccz + cubeSize)
       (bs, rs) = partitionEithers [iX, iY, iZ]
       rs' = (0, 1) : rs
-      iX = st rox rdx (ccx, cex)
-      iY = st roy rdy (ccy, cey)
-      iZ = st roz rdz (ccz, cez)
+      iX = st rox rdx (Range ccx cex)
+      iY = st roy rdy (Range ccy cey)
+      iZ = st roz rdz (Range ccz cez)
 
 instance Collision Ray Sphere Bool where
+  collide = collision
   collision !Ray{..} !Sphere{..} = b*b - 4*a*c >= 0
     where
       a = inner_prod rayDirection rayDirection
@@ -208,6 +220,7 @@ sameDirection :: V → V → Bool
 sameDirection a b = inner_prod a b >= 0
 
 instance Collision (Ray, GLdouble → V → Bool) AnnotatedTriangle (Maybe (GLdouble, V)) where
+  collide a b = isJust $ collision a b
   collision !(Ray{..}, inter_pred) !AnnotatedTriangle{..} = do
     let
       (a, _, _) = triangleVertices
@@ -225,6 +238,7 @@ matrix_vector_mult :: Num a => Matrix33 a -> Vector3 a -> Vector3 a
 matrix_vector_mult !(Matrix33 a b c) d = Vector3 (inner_prod a d) (inner_prod b d) (inner_prod c d)
 
 instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GLdouble, V, AnnotatedTriangle)) where
+  collide a b = isJust $ collision a b
   collision ray triangles
       | null collisions = Nothing
       | otherwise = Just $ minimumBy (compare `on` (\(_,x,_) → x)) collisions
@@ -265,6 +279,7 @@ lineLoop (x:xs) = go x xs
     go l (y:ys) = (l, y) : go y ys
 
 instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
+  collide = collision
   collision t t' = or $
       h t' . lineLoop (tupleToList $ triangleVertices t) ++ h t . lineLoop (tupleToList $ triangleVertices t')
     where
@@ -306,6 +321,7 @@ tri_in_obstacle :: GeometricObstacle → AnnotatedTriangle → Bool
 tri_in_obstacle o = or . (point_in_obstacle o .) .  tupleToList . triangleVertices
 
 instance Collision GeometricObstacle GeometricObstacle Bool where
+  collide = collision
   collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
 
 at_max_z :: AnnotatedTriangle → GLdouble

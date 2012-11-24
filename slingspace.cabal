@@ -26,6 +26,12 @@ hs-source-dirs: src
 ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
 extensions: CPP ForeignFunctionInterface
 
+executable: slingspace-autopilot
+main-is: autopilot.hs
+hs-source-dirs: src
+ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
+extensions: CPP ForeignFunctionInterface
+
 executable: slingspace-bench
 main-is: bench.hs
 hs-source-dirs: src

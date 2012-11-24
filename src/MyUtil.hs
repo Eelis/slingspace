@@ -2,10 +2,10 @@
 
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem
   ) where
 
-import Prelude hiding (catch, (.))
+import Prelude hiding ((.))
 import Data.IORef (IORef, readIORef, writeIORef)
 import MyGL ()
 import Data.List (minimumBy)
@@ -19,6 +19,7 @@ import System.Environment (getArgs)
 import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, {-myThreadId,-} forkIO)
 import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
 import System.Clock (getTime, Clock(Monotonic), TimeSpec, sec, nsec)
+import Control.Monad.Random (MonadRandom, getRandomR)
 
 #ifdef linux_HOST_OS
 
@@ -138,3 +139,6 @@ whenJust = flip (maybe (return ()))
 orElse :: Maybe a -> a -> a
 orElse Nothing d = d
 orElse (Just x) _ = x
+
+randomItem :: (Functor m, MonadRandom m) => [a] → m a
+randomItem xs = fmap (xs !!) $ getRandomR (0, length xs - 1)
