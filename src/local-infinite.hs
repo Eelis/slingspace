@@ -4,7 +4,7 @@ import Gui (gui)
 import qualified Gui
 import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, shooting_range)
 import qualified Data.Map as Map
-import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), flatten)
+import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
 import MyGL ()
 import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..), Color3(..))
@@ -33,7 +33,7 @@ main = do
 
   let
     tree = Octree.fromList bigCube obstacles
-    vertices = flatten (map (VisualObstacle (Color3 0.9 0.9 0.9)) obstacles)
+    vertices = asStoredVertices (map (VisualObstacle (Color3 0.9 0.9 0.9)) obstacles)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
     consider l new = if not trainingWheels || (l' `betterThan` l) then Just $ makeController new l' else Nothing
@@ -52,4 +52,8 @@ main = do
 
   deepseq tree $ do
 
-  gui (makeController initialPlayer (lifeAfter tree gp_cfg initialPlayer)) (vertices, tree) name (shooting_range gp_cfg)
+  gui
+    (makeController initialPlayer (lifeAfter tree gp_cfg initialPlayer))
+    (vertices, tree)
+    name
+    (shooting_range gp_cfg)

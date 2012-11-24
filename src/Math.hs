@@ -247,8 +247,8 @@ storeVertex = Store.run $ liftA3 StoredVertex
   (Store.element storedNormal)
   (Store.element storedColor)
 
-flatten :: [VisualObstacle] → SV.Vector StoredVertex
-flatten obstacles = SV.pack $
+asStoredVertices :: [VisualObstacle] → SV.Vector StoredVertex
+asStoredVertices obstacles = SV.pack $
   [ StoredVertex vertex triangleNormal obstacleColor
   | VisualObstacle{..} <- obstacles
   , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle

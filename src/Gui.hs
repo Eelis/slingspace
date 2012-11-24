@@ -1,11 +1,11 @@
 {-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns #-}
 
-module Gui (Controller(..), gui) where
+module Gui (Controller(..), gui, playback) where
 
 import Data.Map (Map)
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
+import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Color3(..), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, VisualObstacle(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, asStoredVertices)
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -19,6 +19,7 @@ import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
 import Foreign.Storable (sizeOf)
 import Data.Traversable (mapM)
+import Control.DeepSeq (deepseq)
 
 import qualified Octree
 import qualified Logic
@@ -395,6 +396,8 @@ gui :: Controller → ObstacleUpdate → String → GLdouble → IO ()
   -- this shootingRange parameter is a bit awkward but passing a whole GameplayConfig would be worse
 gui controller (storedObstacles, tree) name shootingRange = do
 
+  deepseq tree $ do
+
   guiConfig@GuiConfig{..} :: GuiConfig
     ← read_config_file "gui.txt"
   scheme@Scheme{..} :: Scheme
@@ -504,3 +507,23 @@ guiTick myname state@State{..} = do
           lift $ GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0
               (fromIntegral newObstacleCount * TerrainGenerator.bytesPerObstacle) (SVP.ptr (SVP.cons a))
           return state{controller=c, obstacleCount=newObstacleCount, tree=newTree,guns=newGuns}
+
+playbackController :: Life -> Gui.Controller
+playbackController l = fix $ \self -> Gui.Controller
+  { players = Map.singleton "jimmy" l
+  , tick = do
+    return (Nothing, case l of Life _ l' -> playbackController l'; Death _ -> self)
+  , release = const Nothing
+  , fire = const (const Nothing) }
+
+defaultObstacleColor :: Color3 GLdouble
+defaultObstacleColor = Color3 0.9 0.9 0.9
+
+playback :: [GeometricObstacle] -> Octree.CubeBox GeometricObstacle -> Life -> IO ()
+  -- non-interactive display of a life
+playback obstacles tree life = gui
+  (playbackController life)
+  ( asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
+  , tree)
+  "jimmy"
+  0 -- shooting range (we don't need player-shot ropes anyway)

@@ -7,7 +7,7 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (newTVarIO, writeTChan, atomically, writeTVar, readTVarIO, newEmptyTMVarIO, tryTakeTMVar, putTMVar, takeTMVar, TChan, newTChanIO)
 import Obstacles (randomObs)
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..), Color3(..))
-import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), inner_prod, trianglesPerObstacle, verticesPerTriangle, StoredVertex, flatten)
+import Math ((<+>), (<*>), V, VisualObstacle(..), GeometricObstacle(..), inner_prod, trianglesPerObstacle, verticesPerTriangle, StoredVertex, asStoredVertices)
 import Data.Bits (xor)
 import Control.Monad (replicateM, liftM3, foldM)
 import Control.Monad.Random (evalRand, mkStdGen, getRandomR)
@@ -73,7 +73,7 @@ buildSector config@Config{..} sid = Sector{..}
         geometricObstacle ← randomObs (c <+> sectorCenter config sid) 800
         return VisualObstacle{..}
     obstacles = evalRand f $ mkStdGen $ seed sid
-    sectorVertices = flatten obstacles
+    sectorVertices = asStoredVertices obstacles
 
 ball :: Set SectorId
 ball = Set.fromAscList $
