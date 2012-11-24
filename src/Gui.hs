@@ -464,13 +464,15 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig s
 
       let cam_pos = rayOrigin body <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot)
 
-      clientState ← readIORef clientStateRef
+      oldClientState ← readIORef clientStateRef
+      let
+        newClientState = flip Map.mapWithKey oldClientState $
+          \(gunGuiConfig guiConfig → GunGuiConfig{..}) g → g { target =
+          find_target tree player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
+            `x_rot_vector` (gun_xrot + cam_xrot)
+            `y_rot_vector` (gun_yrot + cam_yrot) }
 
-      writeIORef clientStateRef $ flip Map.mapWithKey clientState $
-        \(gunGuiConfig guiConfig → GunGuiConfig{..}) g → g { target =
-        find_target tree player gameplayConfig $ Ray cam_pos $ Vector3 0 0 (-1)
-          `x_rot_vector` (gun_xrot + cam_xrot)
-          `y_rot_vector` (gun_yrot + cam_yrot) }
+      writeIORef clientStateRef newClientState
 
       newController ← foldM (\gs (k, v) →
         case v of
@@ -479,7 +481,7 @@ guiTick GuiContext{..} pauseRef cameraRef clientStateRef myname gameplayConfig s
             return $ fire gs k t
           _ → return gs)
           controller
-          (Map.toList clientState)
+          (Map.toList newClientState)
 
       (mx, c) <- tick newController
       case mx of
