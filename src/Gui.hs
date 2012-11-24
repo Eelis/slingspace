@@ -20,6 +20,7 @@ import Foreign.Ptr (nullPtr, plusPtr)
 import Foreign.Storable (sizeOf)
 import Data.Traversable (mapM)
 import Control.DeepSeq (deepseq)
+import Obstacles (ObstacleTree)
 
 import qualified Octree
 import qualified Logic
@@ -93,7 +94,6 @@ data FireState = FireAsap | ReleaseAsap | Fired | Idle
 data ClientGunState = ClientGunState { target :: Maybe V, fireState :: FireState }
 type Guns = Map Gun ClientGunState
 type Players = Map String Life
-type Tree = Octree.CubeBox GeometricObstacle
 
 data State = State
   { controller :: Controller
@@ -101,9 +101,9 @@ data State = State
   , camera :: CameraOrientation
   , guns :: Guns
   , obstacleCount :: Int
-  , tree :: Tree }
+  , tree :: ObstacleTree }
 
-type ObstacleUpdate = (SV.Vector StoredVertex, Tree)
+type ObstacleUpdate = (SV.Vector StoredVertex, ObstacleTree)
 
 data Controller = Controller
   { players :: Players
@@ -286,10 +286,10 @@ drawFloor {-visible_obs-} Player{..} = do
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               vertex $ tov $ Vector3 x' 0 z'
 
-drawTree :: Tree -> Gui ()
+drawTree :: ObstacleTree -> Gui ()
 drawTree = lift . renderPrimitive Lines . go Nothing
   where
-    go :: Maybe V -> Tree -> IO ()
+    go :: Maybe V -> ObstacleTree -> IO ()
     go mp t = do
       let
         s = cubeSize (fst t) / 2 :: GLdouble
@@ -461,7 +461,7 @@ gui controller (storedObstacles, tree) name shootingRange = do
   runReaderT (setupCallbacks initialState name) Static{..}
   GLUT.mainLoop
 
-f :: Static -> CameraOrientation -> Tree -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
+f :: Static -> CameraOrientation -> ObstacleTree -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
 f Static{..} o tree playerPos g ClientGunState{..} = do
     c <- CMS.get
     newFireState <- case (newTarget, fireState) of

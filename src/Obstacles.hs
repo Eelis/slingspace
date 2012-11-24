@@ -6,6 +6,7 @@ module Obstacles
   , TunnelConfig
   , randomObs
   , bigCube
+  , ObstacleTree
   ) where
 
 import MyUtil ((.), bounded)
@@ -14,6 +15,9 @@ import Control.Monad (replicateM)
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Prelude hiding ((.))
 import Control.Monad.Random (MonadRandom(..))
+import qualified Octree
+
+type ObstacleTree = Octree.CubeBox GeometricObstacle
 
 {-
 aboveSurface :: (Ord a, Floating a) ⇒ Vector3 a → Bool

@@ -22,6 +22,7 @@ import MyGL ()
 import MyUtil ((.))
 import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
+import Obstacles (ObstacleTree)
 import qualified Octree
 
 data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
@@ -77,9 +78,7 @@ rope_effect c off = off </> (norm_2 off + rope_k c)
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
-type Tree = Octree.CubeBox GeometricObstacle
-
-tickPlayer :: Tree → GameplayConfig → Player → Either V Player
+tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
 tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
     case collisionPos of
       Just cp -> Left cp
@@ -100,7 +99,7 @@ tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-findTarget :: Tree → V → GLdouble → Ray → Maybe V
+findTarget :: ObstacleTree → V → GLdouble → Ray → Maybe V
 findTarget tree playerPos shooting_range gunRay@(Ray gunOrigin gunDirection) =
   (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
@@ -121,11 +120,11 @@ lifeExpectancyUpto m = go 0
       | Life _ l' <- l, n /= m = go (n+1) l'
       | otherwise = n
 
-lifeAfter :: Tree → GameplayConfig -> Player -> Life
+lifeAfter :: ObstacleTree → GameplayConfig -> Player -> Life
 lifeAfter tree cfg = go
   where go p = either Death (\q -> Life q (go q)) $ tickPlayer tree cfg p
 
-live :: Tree → GameplayConfig -> Player -> Life
+live :: ObstacleTree → GameplayConfig -> Player -> Life
 live tree cfg p = Life p (lifeAfter tree cfg p)
 
 birth :: Life -> Maybe Player -- Nothing if stillborn
