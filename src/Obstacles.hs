@@ -6,12 +6,13 @@ module Obstacles
   , benchmark_tunnel
   , TunnelConfig
   , randomObs
+  , bigCube
   ) where
 
 import MyUtil ((.), bounded)
-import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision)
+import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision, Cube(..))
 import Control.Monad (replicateM)
-import Graphics.UI.GLUT
+import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Prelude hiding ((.))
 import Control.Monad.Random (MonadRandom(..))
 
@@ -119,3 +120,8 @@ benchmark_tunnel = take 1000 . tu (Vector3 0 0 0)
       coff ← getRandomR (Vector3 (-width) 0 0, Vector3 width (2 * width) 0)
       newobst ← randomObs (from <+> coff) obsSize
       (newobst :) . tu (from <+> Vector3 0 300 0)
+
+bigCube :: Cube
+bigCube = Cube (Vector3 (-m) (-m) (-m)) (2 * m)
+  where
+    m = 1000000

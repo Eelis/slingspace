@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards, NamedFieldPuns #-}
 
 module Logic
   ( Gun(..), Rope(..)
@@ -10,7 +10,7 @@ module Logic
   , SerializablePlayer(..)
   , update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
-  , Life(..), lifeAfter, moments, lifeExpectancyUpto, birth
+  , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth
   , toFloor
   ) where
 
@@ -100,8 +100,8 @@ tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-findTarget :: Tree → V → GameplayConfig → Ray → Maybe V
-findTarget tree playerPos GameplayConfig{..} gunRay@(Ray gunOrigin gunDirection) =
+findTarget :: Tree → V → GLdouble → Ray → Maybe V
+findTarget tree playerPos shooting_range gunRay@(Ray gunOrigin gunDirection) =
   (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where
@@ -124,6 +124,9 @@ lifeExpectancyUpto m = go 0
 lifeAfter :: Tree → GameplayConfig -> Player -> Life
 lifeAfter tree cfg = go
   where go p = either Death (\q -> Life q (go q)) $ tickPlayer tree cfg p
+
+live :: Tree → GameplayConfig -> Player -> Life
+live tree cfg p = Life p (lifeAfter tree cfg p)
 
 birth :: Life -> Maybe Player -- Nothing if stillborn
 birth = listToMaybe . moments

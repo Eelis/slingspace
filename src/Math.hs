@@ -283,8 +283,8 @@ verticesPerTriangle = 3
 instance NFData GeometricObstacle
 
 data VisualObstacle = VisualObstacle
-  { geometricObstacle :: !GeometricObstacle
-  , obstacleColor :: !(Color3 GLdouble) }
+  { obstacleColor :: !(Color3 GLdouble)
+  , geometricObstacle :: !GeometricObstacle }
 
 squaredDistance :: V → V → GLdouble
 squaredDistance a b = inner_prod d d
