@@ -1,7 +1,8 @@
 GameplayConfig
-{ rope_k = 1500
+{ ropeForceScale = 0.013
+, ropeForceExponent = 0.49
 , friction = 0.995
 , shooting_speed = 75.0
 , shooting_range = 5000.0
-, gravity = Vector3 0 (-0.12) 0
+, gravity = Vector3 0 (-0.13) 0
 }

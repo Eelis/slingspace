@@ -41,7 +41,8 @@ data ServerToClientMsg =
     deriving (Read, Show)
 
 data GameplayConfig = GameplayConfig
-  { rope_k, friction, shooting_speed, shooting_range :: GLdouble
+  { ropeForceScale, ropeForceExponent :: GLdouble
+  , friction, shooting_speed, shooting_range :: GLdouble
   , gravity :: Vector3 GLdouble
   } deriving (Show, Read)
 
@@ -73,7 +74,8 @@ release :: Gun → Player → Player
 release g p = p { guns = Map.delete g $ guns p }
 
 rope_effect :: GameplayConfig → V → V
-rope_effect c off = off </> (norm_2 off + rope_k c)
+rope_effect GameplayConfig{..} off = (off </> l) <*> (ropeForceScale * (l ** ropeForceExponent))
+  where l = norm_2 off
 
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
@@ -89,7 +91,7 @@ tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
     newBody = Ray
         (rayOrigin <+> rayDirection)
-        ((gravity cfg <+> (Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns)) <*> friction cfg)
+        ((gravity cfg <+> Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns) <*> friction cfg)
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = (\(_, x, _) -> x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
