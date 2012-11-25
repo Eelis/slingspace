@@ -27,27 +27,36 @@ a `betterThan` b
       value = average . map ((\(Vector3 _ y z) -> y+z) . rayOrigin . body) . take lookahead . moments
       lookahead = 400
 
+considerAlternatives :: forall m . (Functor m, MonadRandom m) =>
+  ObstacleTree → GameplayConfig → Life → m (Maybe (Player, Life))
+considerAlternatives _ _ (Death _) = return Nothing -- too late
+considerAlternatives obstacles gpCfg (Life now future) = do
+  alternativeNow <- do
+    i :: Int <- getRandomR (0, 10)
+    if i == 0
+      then return $ release LeftGun now
+      else do
+        c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
+        return $ fire gpCfg LeftGun c now
+  let alternativeFuture = lifeAfter obstacles gpCfg alternativeNow
+  return $ if alternativeFuture `betterThan` future
+    then Just (alternativeNow, alternativeFuture)
+    else Nothing
+ where
+  s = 3000
+  here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
+  nearby = Octree.query here obstacles
+
 tarzan :: forall m . (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Life → m Life
 tarzan obstacles gpCfg = go
   where
     go :: Life → m Life
     go l@(Death _) = return l
-    go (Life now future) = do
-        alternativeNow <- do
-          i :: Int <- getRandomR (0, 10)
-          if i == 0
-            then return $ release LeftGun now
-            else do
-              c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
-              return $ fire gpCfg LeftGun c now
-        let alternativeFuture = lifeAfter obstacles gpCfg alternativeNow
-        if alternativeFuture `betterThan` future
-          then Life alternativeNow `fmap` go alternativeFuture
-          else Life now `fmap` go future
-      where
-        s = 3000
-        here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
-        nearby = Octree.query here obstacles
+    go l@(Life now future) = do
+      ml' <- considerAlternatives obstacles gpCfg l
+      case ml' of
+        Nothing -> Life now `fmap` go future
+        Just (x, y) -> Life x `fmap` go y
 
 main :: IO ()
 main = do
