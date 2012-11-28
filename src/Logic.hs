@@ -5,11 +5,6 @@ module Logic
   , Player(..)
   , findTarget, fire, release, tickPlayer, move
   , GameplayConfig(..)
-  , Greeting(..)
-  , ClientToServerMsg(..), ServerToClientMsg(..)
-  , SerializablePlayer(..)
-  , update_player, serialize_player
-  , from_network_obs, NetworkObstacle(..)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, immortalize, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction
   , toFloor
   ) where
@@ -17,7 +12,7 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
+import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
 import MyGL ()
 import MyUtil ((.), randomItem)
 import Data.Maybe (listToMaybe)
@@ -25,21 +20,6 @@ import Prelude hiding ((.))
 import Obstacles (ObstacleTree)
 import qualified Octree
 import Control.Monad.Random (MonadRandom, getRandomR)
-
-data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
-
-data Greeting = Welcome GameplayConfig [NetworkObstacle] | PissOff String deriving (Show, Read)
-
-from_network_obs :: [NetworkObstacle] → [GeometricObstacle]
-from_network_obs = map (\(NO l) → annotateObstacle $ (\(x, y, z) → annotateTriangle x y z) . l)
-
-data ClientToServerMsg = FireAt Gun V | Release Gun | Spawn deriving (Read, Show)
-data ServerToClientMsg =
-  Players (Map String SerializablePlayer) |
-    -- The Players message is used for "incremental" updates. For radical changes we use Teleport messages. This allows the client to "smooth out" movement between incremental changes, without having to go to great lengths to prevent smoothing out teleportation (which must not be smoothed!).
-  Teleport String SerializablePlayer |
-  TextMsg String
-    deriving (Read, Show)
 
 data GameplayConfig = GameplayConfig
   { ropeForceScale, ropeForceExponent :: GLdouble
@@ -51,17 +31,9 @@ data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
 
 data Gun = LeftGun | RightGun deriving (Read, Show, Ord, Eq, Enum)
 
-data SerializablePlayer = SerializablePlayer !Ray (Map Gun Rope) deriving (Read, Show)
-
 data Player = Player
   { body :: !Ray
   , guns :: Map Gun Rope } -- todo: more appropriate data structure..
-
-update_player :: Player → SerializablePlayer → Player
-update_player p (SerializablePlayer x y) = p { body = x, guns = y }
-
-serialize_player :: Player → SerializablePlayer
-serialize_player = error "broken" -- (Player x y z _) = SerializablePlayer x y z
 
 fire :: GameplayConfig → Gun → V → Player → Player
 fire c g t p = p { guns = Map.insert g (Rope (Ray pos dir) eta) (guns p) }
