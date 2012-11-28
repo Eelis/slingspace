@@ -2,7 +2,7 @@
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, shooting_range)
+import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, shooting_range, immortalize, live)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
 import MyGL ()
@@ -12,7 +12,6 @@ import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRandIO)
 import Data.Function (on)
-import Control.DeepSeq (deepseq)
 import qualified Octree
 
 name :: String
@@ -36,24 +35,21 @@ main = do
     vertices = asStoredVertices (map (VisualObstacle (Color3 0.9 0.9 0.9)) obstacles)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
-    consider l new = if not trainingWheels || (l' `betterThan` l) then Just $ makeController new l' else Nothing
-      where l' = lifeAfter tree gp_cfg new
 
-    makeController :: Player -> Life -> Gui.Controller
-    makeController p l = Gui.Controller
-      { players = Map.singleton name (Life p l)
-      , tick = return (Nothing, case l of
-        Death v ->
-          let phoenix = p{body=Ray v (Vector3 0 0 0)}
-          in makeController phoenix (lifeAfter tree gp_cfg phoenix)
-        Life p' l' -> makeController p' l')
-      , release = \g -> consider l (release g p)
-      , fire = \g v -> consider l (fire gp_cfg g v p) }
-
-  deepseq tree $ do
+    makeController :: Life -> Gui.Controller
+    makeController l@(Life p f) = Gui.Controller
+      { players = Map.singleton name l
+      , tick = return (Nothing, makeController f)
+      , release = \g -> consider (release g p)
+      , fire = \g v -> consider (fire gp_cfg g v p) }
+      where
+        consider new = if not trainingWheels || (l' `betterThan` l)
+            then Just $ makeController (Life new (immortalize tree gp_cfg l'))
+            else Nothing
+          where l' = lifeAfter tree gp_cfg new
 
   gui
-    (makeController initialPlayer (lifeAfter tree gp_cfg initialPlayer))
+    (makeController (immortalize tree gp_cfg $ live tree gp_cfg initialPlayer))
     (vertices, tree)
     name
     (shooting_range gp_cfg)

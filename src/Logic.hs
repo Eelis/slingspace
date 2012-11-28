@@ -10,20 +10,21 @@ module Logic
   , SerializablePlayer(..)
   , update_player, serialize_player
   , from_network_obs, NetworkObstacle(..)
-  , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth
+  , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, immortalize, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction
   , toFloor
   ) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.UI.GLUT (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision)
+import Math ((<+>), (<->), (</>), (<*>), annotateObstacle, annotateTriangle, norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
 import MyGL ()
-import MyUtil ((.))
+import MyUtil ((.), randomItem)
 import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
 import Obstacles (ObstacleTree)
 import qualified Octree
+import Control.Monad.Random (MonadRandom, getRandomR)
 
 data NetworkObstacle = NO [(V, V, V)] deriving (Show, Read)
 
@@ -115,7 +116,7 @@ moments :: Life -> [Player]
 moments (Death _) = []
 moments (Life p l) = p : moments l
 
-lifeExpectancyUpto :: Int -> Life -> Int
+lifeExpectancyUpto :: Integer -> Life -> Integer
 lifeExpectancyUpto m = go 0
   where
     go n l
@@ -134,3 +135,58 @@ birth = listToMaybe . moments
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z
+
+future :: Life -> Life
+future l@(Death _) = l
+future (Life _ l) = l
+
+immortalize :: ObstacleTree → GameplayConfig -> Life -> Life
+immortalize t c u = case u of
+    Life p l → go p l
+    Death _ → error "can't immortalize the dead"
+  where
+    go _ (Life p l) = Life p (go p l)
+    go p (Death v) = Life p' (go p' (lifeAfter t c p'))
+      where p' = Player (Ray v (Vector3 0 0 0)) (guns p)
+
+orAlternativeLife :: Life -> Life -> Life
+orAlternativeLife (Death _) l = l -- oops, died
+orAlternativeLife l _ = l
+
+reviseIfWise :: Functor m => (Life -> m Life) → Life → m Life
+reviseIfWise f x = fmap (`orAlternativeLife` x) (f x)
+
+mapFuture :: (Monad m, Functor m) => (Life -> m Life) -> Life -> m Life
+mapFuture _ d@(Death _) = return d
+mapFuture f (Life a b) = Life a `fmap` f b
+
+keepTrying :: (Monad m, Functor m) => (Life -> m Life) -> Life -> m Life
+keepTrying f l = reviseIfWise f l >>= mapFuture (keepTrying f)
+
+positions :: Life -> [V]
+positions = map (rayOrigin . body) . moments
+
+randomAction :: (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Player → m Player
+randomAction tree gpCfg now = do
+  i :: Int <- getRandomR (0, 10)
+  if i == 0
+    then return $ release LeftGun now
+    else do
+      c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
+      return $ fire gpCfg LeftGun c now
+  where
+    s = 3000 -- todo: base on shootingRange
+    here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
+    nearby = Octree.query here tree
+
+randomLife :: (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Player → m Life
+randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree gpCfg
+
+tryRandomAction :: (MonadRandom m, Functor m) => (Life -> Life -> Bool) -> ObstacleTree -> GameplayConfig -> Life -> m Life
+tryRandomAction _ _ _ d@(Death _) = return d -- hunter-to-be already dead
+tryRandomAction cmp tree gpCfg current@(Life now _) = do
+  alternative <- randomLife tree gpCfg now
+  return $ if future alternative `cmp` future current
+    then alternative
+    else Death (rayOrigin $ body $ now)
+

@@ -2,13 +2,13 @@
 
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average
   ) where
 
 import Prelude hiding ((.))
 import Data.IORef (IORef, readIORef, writeIORef)
 import MyGL ()
-import Data.List (minimumBy)
+import Data.List (minimumBy, genericLength)
 import Graphics.UI.GLUT ()
 import Network.Socket (Socket, sClose, send, recv)
 import Control.Monad (liftM, forever)
@@ -142,3 +142,6 @@ orElse (Just x) _ = x
 
 randomItem :: (Functor m, MonadRandom m) => [a] → m a
 randomItem xs = fmap (xs !!) $ getRandomR (0, length xs - 1)
+
+average :: Fractional b => [b] -> b
+average l = sum l / fromInteger (genericLength l)
