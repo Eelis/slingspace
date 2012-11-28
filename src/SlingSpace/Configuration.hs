@@ -48,7 +48,10 @@ defaultGuiConfig = GuiConfig
   , exit_key = (Char 'q', Down)
   , zoom_in_key = (MouseButton WheelUp, Down)
   , zoom_out_key = (MouseButton WheelDown, Down)
+  , tickDuration = 10
   }
 
 defaultObstacleColor :: Color3 GLdouble
 defaultObstacleColor = Color3 0.9 0.9 0.9
+
+

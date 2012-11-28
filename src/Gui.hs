@@ -78,6 +78,7 @@ data GuiConfig = GuiConfig
   , camConf :: CameraConfig
   , schemeFile :: String
   , restart_key, pause_key, exit_key, zoom_in_key, zoom_out_key :: (Key, KeyState)
+  , tickDuration :: Integer -- in milliseconds
   } deriving Typeable
 
 data Static = Static
@@ -117,9 +118,6 @@ data Controller = Controller
 
 
 
-
-tickDurationMilliSecs :: Integer
-tickDurationMilliSecs = 10  -- Todo: Make configurable.
 
 initialGuns :: Guns
 initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
@@ -233,7 +231,7 @@ setupCallbacks initialState name = do
     newState ← runReaderT (guiTick name state) context
     writeIORef stateRef newState
     tn ← getMonotonicMilliSecs
-    let next' = next + tickDurationMilliSecs
+    let next' = next + tickDuration
     if tn >= next
       then self next'
       else GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
