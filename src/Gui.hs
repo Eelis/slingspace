@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns, DeriveDataTypeable #-}
 
-module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
+module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), CameraOrientation(..), gui) where
 
 import Data.Map (Map)
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
@@ -62,7 +62,6 @@ data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
   , fov :: GLdouble -- in degrees
   , zoomIn, zoomOut :: GLdouble -> GLdouble
-  , cam_init_dist :: GLdouble
   , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
   }
@@ -381,8 +380,8 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: Controller → ObstacleUpdate → String → GuiConfig → (Gun -> GunConfig) → IO ()
-gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig = do
+gui :: Controller → ObstacleUpdate → String → GuiConfig → (Gun -> GunConfig) → CameraOrientation → IO ()
+gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig initialOrientation = do
 
   deepseq tree $ do
 
@@ -393,7 +392,7 @@ gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig = 
     initialState = State
       { controller = controller
       , paused = True
-      , camera = CameraOrientation (cam_init_dist camConf) 0 pi
+      , camera = initialOrientation
       , guns = initialGuns
       , obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
       , tree = tree }

@@ -7,12 +7,13 @@ import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
 import MyGL ()
 import MyUtil ((.), read_config_file, loadConfig)
-import Graphics.UI.GLUT (Vector3(..), Color3(..))
+import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRandIO)
 import Data.Function (on)
 import qualified Octree
+import qualified SlingSpace.Configuration
 
 name :: String
 name = "Player"
@@ -33,7 +34,7 @@ main = do
 
   let
     tree = Octree.fromList bigCube obstacles
-    vertices = asStoredVertices (map (VisualObstacle (Color3 0.9 0.9 0.9)) obstacles)
+    vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
 
@@ -55,3 +56,4 @@ main = do
     name
     guiConfig
     gunConfig
+    SlingSpace.Configuration.def

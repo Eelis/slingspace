@@ -14,7 +14,7 @@ import Data.List (genericTake)
 import Control.Monad.Random (evalRandIO, runRand)
 import System.Random (mkStdGen, StdGen)
 import qualified Octree
-import SlingSpace.Configuration (defaultObstacleColor)
+import qualified SlingSpace.Configuration
 
 playerName :: String
 playerName = "Player"
@@ -45,7 +45,7 @@ main = do
   let
     tree = Octree.fromList bigCube obstacles
     liveForever = immortalize tree gpCfg . live tree gpCfg
-    vertices = asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
+    vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
 
     makeController :: Life -> Life -> StdGen -> Gui.Controller
     makeController (Death _) _ _ = error "died"
@@ -68,3 +68,5 @@ main = do
     playerName
     guiConfig
     gunConfig
+    SlingSpace.Configuration.def
+    
