@@ -2,9 +2,10 @@
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, shooting_range, immortalize, live)
+import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, immortalize, live, gunConfigs)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
+import Data.Maybe (fromJust)
 import MyGL ()
 import MyUtil ((.), read_config_file)
 import Graphics.UI.GLUT (Vector3(..), Color3(..))
@@ -25,10 +26,10 @@ trainingWheels = False
 
 main :: IO ()
 main = do
-  tu_cfg ← read_config_file "infinite-tunnel.txt"
-  gp_cfg ← read_config_file "gameplay.txt"
+  tuCfg ← read_config_file "infinite-tunnel.txt"
+  gpCfg ← read_config_file "gameplay.txt"
 
-  obstacles :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tu_cfg)
+  obstacles :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tuCfg)
 
   let
     tree = Octree.fromList bigCube obstacles
@@ -41,15 +42,15 @@ main = do
       { players = Map.singleton name l
       , tick = return (Nothing, makeController f)
       , release = \g -> consider (release g p)
-      , fire = \g v -> consider (fire gp_cfg g v p) }
+      , fire = \g v -> consider (fire (fromJust $ Map.lookup g (gunConfigs gpCfg)) g v p) }
       where
         consider new = if not trainingWheels || (l' `betterThan` l)
-            then Just $ makeController (Life new (immortalize tree gp_cfg l'))
+            then Just $ makeController (Life new (immortalize tree gpCfg l'))
             else Nothing
-          where l' = lifeAfter tree gp_cfg new
+          where l' = lifeAfter tree gpCfg new
 
   gui
-    (makeController (immortalize tree gp_cfg $ live tree gp_cfg initialPlayer))
+    (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
     (vertices, tree)
     name
-    (shooting_range gp_cfg)
+    (gunConfigs gpCfg)

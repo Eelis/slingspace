@@ -3,8 +3,8 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , findTarget, fire, release, tickPlayer, move
-  , GameplayConfig(..)
+  , findTarget, fire, release, tickPlayer, move, gunConfigFor
+  , GameplayConfig(..), GunConfigs, GunConfig(shootingRange)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, immortalize, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction
   , toFloor
   ) where
@@ -15,16 +15,21 @@ import Graphics.UI.GLUT (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
 import MyGL ()
 import MyUtil ((.), randomItem)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (listToMaybe, fromJust)
 import Prelude hiding ((.))
 import Obstacles (ObstacleTree)
 import qualified Octree
 import Control.Monad.Random (MonadRandom, getRandomR)
 
+data GunConfig = GunConfig
+  { ropeForceScale, ropeForceExponent, shootingSpeed, shootingRange :: GLdouble }
+  deriving (Show, Read)
+
+type GunConfigs = Map Gun GunConfig
+
 data GameplayConfig = GameplayConfig
-  { ropeForceScale, ropeForceExponent :: GLdouble
-  , friction, shooting_speed, shooting_range :: GLdouble
-  , gravity :: Vector3 GLdouble
+  { gunConfigs :: GunConfigs
+  , friction :: GLdouble, gravity :: V
   } deriving (Show, Read)
 
 data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
@@ -35,26 +40,31 @@ data Player = Player
   { body :: !Ray
   , guns :: Map Gun Rope } -- todo: more appropriate data structure..
 
-fire :: GameplayConfig → Gun → V → Player → Player
-fire c g t p = p { guns = Map.insert g (Rope (Ray pos dir) eta) (guns p) }
+gunConfigFor :: Gun -> GunConfigs -> GunConfig
+gunConfigFor g = fromJust . Map.lookup g
+
+fireRope :: GunConfig → V → V → Rope
+fireRope c t pos = Rope (Ray pos dir) eta
   where
-   pos = rayOrigin $ body p
    off = t <-> pos
-   eta = round $ norm_2 off / shooting_speed c
+   eta = round $ norm_2 off / shootingSpeed c
    dir = off </> fromInteger eta
+
+fire :: GunConfig → Gun → V → Player → Player
+fire c g t p = p { guns = Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
 
 release :: Gun → Player → Player
 release g p = p { guns = Map.delete g $ guns p }
 
-rope_effect :: GameplayConfig → V → V
-rope_effect GameplayConfig{..} off = (off </> l) <*> (ropeForceScale * (l ** ropeForceExponent))
+rope_effect :: GunConfig → V → V
+rope_effect GunConfig{..} off = (off </> l) <*> (ropeForceScale * (l ** ropeForceExponent))
   where l = norm_2 off
 
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 
 tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
-tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
+tickPlayer tree cfg@GameplayConfig{gunConfigs} Player{body=body@Ray{..}, ..} =
     case collisionPos of
       Just cp -> Left cp
       Nothing -> Right $ Player{ body = newBody, guns = tickGun . guns }
@@ -64,7 +74,7 @@ tickPlayer tree cfg Player{body=body@Ray{..}, ..} =
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
     newBody = Ray
         (rayOrigin <+> rayDirection)
-        ((gravity cfg <+> Map.fold (\r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect cfg (pp <-> rayOrigin); _ → m) rayDirection guns) <*> friction cfg)
+        ((gravity cfg <+> Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect (gunConfigFor g gunConfigs) (pp <-> rayOrigin); _ → m) rayDirection guns) <*> friction cfg)
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = (\(_, x, _) -> x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
@@ -138,21 +148,21 @@ keepTrying f l = reviseIfWise f l >>= mapFuture (keepTrying f)
 positions :: Life -> [V]
 positions = map (rayOrigin . body) . moments
 
-randomAction :: (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Player → m Player
-randomAction tree gpCfg now = do
+randomAction :: (Functor m, MonadRandom m) => ObstacleTree → GunConfig → Player → m Player
+randomAction tree cfg now = do
   i :: Int <- getRandomR (0, 10)
   if i == 0
     then return $ release LeftGun now
     else do
       c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
-      return $ fire gpCfg LeftGun c now
+      return $ fire cfg LeftGun c now
   where
     s = 3000 -- todo: base on shootingRange
     here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
     nearby = Octree.query here tree
 
 randomLife :: (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Player → m Life
-randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree gpCfg
+randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfigFor LeftGun (gunConfigs gpCfg))
 
 tryRandomAction :: (MonadRandom m, Functor m) => (Life -> Life -> Bool) -> ObstacleTree -> GameplayConfig -> Life -> m Life
 tryRandomAction _ _ _ d@(Death _) = return d -- hunter-to-be already dead

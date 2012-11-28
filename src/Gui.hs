@@ -10,7 +10,7 @@ import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), moments, birth)
+import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), moments, birth, GunConfig(shootingRange), GunConfigs)
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, whenJust)
@@ -83,7 +83,7 @@ data Static = Static
   { obstacleBuffer :: GLUT.BufferObject
   , scheme :: Scheme
   , guiConfig :: GuiConfig
-  , shootingRange :: GLdouble }
+  , gunConfigs :: GunConfigs }
 
 type Gui = ReaderT Static IO
 
@@ -392,9 +392,8 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: Controller → ObstacleUpdate → String → GLdouble → IO ()
-  -- this shootingRange parameter is a bit awkward but passing a whole GameplayConfig would be worse
-gui controller (storedObstacles, tree) name shootingRange = do
+gui :: Controller → ObstacleUpdate → String → GunConfigs → IO ()
+gui controller (storedObstacles, tree) name gunConfigs = do
 
   deepseq tree $ do
 
@@ -470,7 +469,9 @@ f Static{..} o tree playerPos g ClientGunState{..} = do
       (_, s) -> return s
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
-    newTarget = findTarget tree playerPos shootingRange $ cameraRay o playerPos (gunGuiConfig guiConfig g)
+    newTarget = do
+      cfg <- Map.lookup g gunConfigs
+      findTarget tree playerPos (shootingRange cfg) $ cameraRay o playerPos (gunGuiConfig guiConfig g)
 
 cameraDirection :: CameraOrientation -> GunGuiConfig -> V
 cameraDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
@@ -526,4 +527,4 @@ playback obstacles tree life = gui
   ( asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
   , tree)
   "jimmy"
-  0 -- shooting range (we don't need player-shot ropes anyway)
+  Map.empty
