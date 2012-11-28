@@ -7,7 +7,7 @@ import qualified Octree
 import qualified Data.Map as Map
 import Control.Monad.Fix (fix)
 import Math (GeometricObstacle, VisualObstacle(..), asStoredVertices)
-import SlingSpace.Configuration (defaultGunConfig, defaultObstacleColor)
+import SlingSpace.Configuration (defaultGunConfig)
 
 playbackController :: Life -> Controller
 playbackController l = fix $ \self -> Controller
@@ -17,12 +17,11 @@ playbackController l = fix $ \self -> Controller
   , release = const Nothing
   , Gui.fire = const (const Nothing) }
 
-playback :: [GeometricObstacle] -> Octree.CubeBox GeometricObstacle -> GuiConfig -> Life -> IO ()
+playback :: [VisualObstacle] -> Octree.CubeBox GeometricObstacle -> GuiConfig -> Life -> IO ()
   -- non-interactive display of a life
 playback obstacles tree guiConfig life = gui
   (playbackController life)
-  ( asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
-  , tree)
+  (asStoredVertices obstacles, tree)
   "jimmy"
   guiConfig
   (const defaultGunConfig)

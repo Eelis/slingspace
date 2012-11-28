@@ -3,7 +3,7 @@
 import Playback (playback)
 import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction)
 import qualified Data.Map as Map
-import Math (GeometricObstacle(..), Ray(..))
+import Math (GeometricObstacle(..), Ray(..), VisualObstacle(..))
 import MyGL ()
 import MyUtil ((.), read_config_file, average, loadConfig)
 import Data.List (genericTake)
@@ -12,6 +12,7 @@ import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRand)
 import System.Random (mkStdGen)
+import SlingSpace.Configuration (defaultObstacleColor)
 import qualified Octree
 
 betterThan :: Life -> Life -> Bool
@@ -37,4 +38,4 @@ main = do
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
     life = keepTrying (tryRandomAction betterThan tree gpCfg) (live tree gpCfg initialPlayer)
 
-  playback obstacles tree guiConfig $ evalRand life (mkStdGen 3)
+  playback (map (VisualObstacle defaultObstacleColor) obstacles) tree guiConfig $ evalRand life (mkStdGen 3)
