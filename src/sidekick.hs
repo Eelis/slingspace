@@ -1,8 +1,8 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, ViewPatterns, NamedFieldPuns #-}
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, live, GameplayConfig(..), future, immortalize, reviseIfWise, positions, tryRandomAction, gunConfigFor)
+import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, live, GameplayConfig(..), future, immortalize, reviseIfWise, positions, tryRandomAction)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), asStoredVertices, V)
 import MyGL ()
@@ -36,7 +36,8 @@ betterThan target a b
 main :: IO ()
 main = do
   tuCfg ← read_config_file "infinite-tunnel.txt"
-  gpCfg ← loadConfig "gameplay"
+  gpCfg@GameplayConfig{gunConfig} ← loadConfig "config/gameplay.hs"
+  guiConfig ← loadConfig "config/gui.hs"
 
   obstacles :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tuCfg)
 
@@ -51,7 +52,7 @@ main = do
       { players = Map.fromList [(playerName, l), ("HAL", ai)]
       , tick = return (Nothing, mc (future l) (future ai) prng)
       , release = \g -> Just $ mc (liveForever $ release g p) ai prng
-      , fire = \g v -> Just $ mc (liveForever $ fire (gunConfigFor g (gunConfigs gpCfg)) g v p) ai prng }
+      , fire = \g v -> Just $ mc (liveForever $ fire (gunConfig g) g v p) ai prng }
     mc altered oldAi prng = makeController altered alteredAI prng'
       where (alteredAI, prng') = runRand (reviseIfWise (tryRandomAction (betterThan (positions altered)) tree gpCfg) oldAi) prng
 
@@ -64,4 +65,5 @@ main = do
       (mkStdGen 3))
     (vertices, tree)
     playerName
-    (gunConfigs gpCfg)
+    guiConfig
+    gunConfig

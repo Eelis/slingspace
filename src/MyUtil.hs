@@ -54,14 +54,12 @@ read_config_file :: Read a ⇒ String → IO a
 read_config_file f = liftM read $ readFile =<< getDataFileName ("config/" ++ f)
 
 loadConfig :: Typeable a ⇒ String → IO a
-loadConfig s = do
-  f <- getDataFileName ("config/" ++ s ++ ".hs")
-  let 
+loadConfig s = runInterpreter i >>= either (error . show) return
+  where
     i = do
-      loadModules [f]
+      loadModules [s]
       setImportsQ [("SlingSpace.Configuration", Nothing), ("Configuration", Nothing)]
       interpret "Configuration.config" infer
-  runInterpreter i >>= either (error . show) return
 
 class IOResource a where dealloc :: a → IO ()
 

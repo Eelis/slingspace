@@ -1,19 +1,19 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns, DeriveDataTypeable #-}
 
-module Gui (Controller(..), gui, playback) where
+module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
 
 import Data.Map (Map)
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Color3(..), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
+import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), GeometricObstacle, VisualObstacle(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, asStoredVertices)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex)
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), moments, birth, GunConfig(shootingRange), GunConfigs)
+import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), moments, birth, GunConfig(shootingRange))
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
-import MyUtil ((.), getDataFileName, read_config_file, getMonotonicMilliSecs, whenJust)
+import MyUtil ((.), getDataFileName, getMonotonicMilliSecs, whenJust, loadConfig)
 import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr)
@@ -21,6 +21,7 @@ import Foreign.Storable (sizeOf)
 import Data.Traversable (mapM)
 import Control.DeepSeq (deepseq)
 import Obstacles (ObstacleTree)
+import Data.Typeable (Typeable)
 
 import qualified Octree
 import qualified Logic
@@ -43,19 +44,19 @@ data Scheme = Scheme
   , grid_color :: Color4 GLclampf
   , rope_line_width :: GLfloat
   , fog_density :: GLfloat
-  , fog_color, left_gun_color, right_gun_color :: Color4 GLclampf
+  , fog_color :: Color4 GLclampf
+  , gunColor :: Gun -> Color4 GLclampf
   , lightModel_ambient
   , ballLight_ambient, ballLight_diffuse
   , ball_material_ambient, ball_material_diffuse :: Color4 GLfloat
   , ballLight_attenuation :: (GLfloat, GLfloat, GLfloat)
-  } deriving Read
+  } deriving Typeable
 
 data GridType =
   DottedGrid { grid_dot_size :: GLfloat } |
   LinedGrid { grid_line_width :: GLfloat }
-    deriving Read
 
-data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } {-| Shadows-} deriving Read
+data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } {-| Shadows-}
 
 data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
@@ -64,26 +65,27 @@ data CameraConfig = CameraConfig
   , cam_zoom_speed :: GLdouble -- in camera distance multiplication per increment
   , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
-  } deriving Read
+  }
 
-data GunGuiConfig = GunGuiConfig { gun_xrot, gun_yrot :: GLdouble }
+data GunGuiConfig = GunGuiConfig { gun_xrot, gun_yrot :: GLdouble {- in radians -} }
 
 data GuiConfig = GuiConfig
   { windowTitle :: String
-  , cross_offset_hor, cross_offset_ver :: GLdouble -- in radians
+  , gunGuiConfig :: Gun -> GunGuiConfig
   , ugly :: Bool
   , floorConf :: Maybe FloorConfig
   , playerSize :: GLdouble
   , camConf :: CameraConfig
   , schemeFile :: String
   , restart_key, pause_key, exit_key, zoom_in_key, zoom_out_key :: (Key, KeyState)
-  } deriving Read
+  } deriving Typeable
 
 data Static = Static
   { obstacleBuffer :: GLUT.BufferObject
   , scheme :: Scheme
   , guiConfig :: GuiConfig
-  , gunConfigs :: GunConfigs }
+  , gunConfig :: Gun -> GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
+  }
 
 type Gui = ReaderT Static IO
 
@@ -114,17 +116,6 @@ data Controller = Controller
 
 
 
-
-
-
-gunColor :: Scheme → Gun → Color4 GLclampf
-  -- We don't use this function type in Scheme itself because then we can't derive Read.
-gunColor Scheme{..} LeftGun = left_gun_color
-gunColor Scheme{..} RightGun = right_gun_color
-
-gunGuiConfig :: GuiConfig → Gun → GunGuiConfig
-gunGuiConfig GuiConfig{..} g =
-  GunGuiConfig (- cross_offset_ver) ((case g of LeftGun -> -1; RightGun -> 1) * cross_offset_hor)
 
 
 tickDurationMilliSecs :: Integer
@@ -321,13 +312,13 @@ drawCrossHairs guns = do
 
 drawRopes :: Map String Player → Gui ()
 drawRopes players = do
-  scheme@Scheme{..} ← asks scheme
+  Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
   GLUT.lineWidth $= rope_line_width
   renderPrimitive Lines $ forM players $ \player@Player{..} →
     forM_ (Map.toList (Logic.guns player)) $ \(gun, Rope{..}) → do
-        GLUT.color $ gunColor scheme gun
+        GLUT.color $ gunColor gun
         vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
   return ()
@@ -392,15 +383,13 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: Controller → ObstacleUpdate → String → GunConfigs → IO ()
-gui controller (storedObstacles, tree) name gunConfigs = do
+gui :: Controller → ObstacleUpdate → String → GuiConfig → (Gun -> GunConfig) → IO ()
+gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig = do
 
   deepseq tree $ do
 
-  guiConfig@GuiConfig{..} :: GuiConfig
-    ← read_config_file "gui.txt"
   scheme@Scheme{..} :: Scheme
-    ← read . (readFile =<< (++ "/" ++ schemeFile) . getDataFileName "schemes")
+    ← getDataFileName "schemes" >>= loadConfig . (++ "/" ++ schemeFile)
 
   let
     initialState = State
@@ -461,6 +450,7 @@ gui controller (storedObstacles, tree) name gunConfigs = do
   GLUT.mainLoop
 
 f :: Static -> CameraOrientation -> ObstacleTree -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
+  -- todo: rename
 f Static{..} o tree playerPos g ClientGunState{..} = do
     c <- CMS.get
     newFireState <- case (newTarget, fireState) of
@@ -469,9 +459,8 @@ f Static{..} o tree playerPos g ClientGunState{..} = do
       (_, s) -> return s
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
-    newTarget = do
-      cfg <- Map.lookup g gunConfigs
-      findTarget tree playerPos (shootingRange cfg) $ cameraRay o playerPos (gunGuiConfig guiConfig g)
+    newTarget = findTarget tree playerPos (shootingRange (gunConfig g))
+      $ cameraRay o playerPos (gunGuiConfig guiConfig g)
 
 cameraDirection :: CameraOrientation -> GunGuiConfig -> V
 cameraDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
@@ -508,23 +497,3 @@ guiTick myname state@State{..} = do
           lift $ GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0
               (fromIntegral newObstacleCount * TerrainGenerator.bytesPerObstacle) (SVP.ptr (SVP.cons a))
           return state{controller=c, obstacleCount=newObstacleCount, tree=newTree,guns=newGuns}
-
-playbackController :: Life -> Gui.Controller
-playbackController l = fix $ \self -> Gui.Controller
-  { players = Map.singleton "jimmy" l
-  , tick = do
-    return (Nothing, case l of Life _ l' -> playbackController l'; Death _ -> self)
-  , release = const Nothing
-  , fire = const (const Nothing) }
-
-defaultObstacleColor :: Color3 GLdouble
-defaultObstacleColor = Color3 0.9 0.9 0.9
-
-playback :: [GeometricObstacle] -> Octree.CubeBox GeometricObstacle -> Life -> IO ()
-  -- non-interactive display of a life
-playback obstacles tree life = gui
-  (playbackController life)
-  ( asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
-  , tree)
-  "jimmy"
-  Map.empty

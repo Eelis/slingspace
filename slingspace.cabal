@@ -1,5 +1,5 @@
 name: slingspace
-version: 20121100
+version: 0
 license: PublicDomain
 author: Eelis van der Weegen
 maintainer: slingspace AT contacts DOT eelis ANOTHERDOT net
@@ -10,19 +10,19 @@ synopsis: A 3D Spiderman-like slinging game.
 tested-with: GHC==7.4
 data-files:
   doc/manual.xhtml
-  schemes/cool.scheme
-  schemes/woods.scheme
+  schemes/cool.hs
+  schemes/woods.hs
   config/gameplay.hs
   config/client.txt
   config/server.txt
-  config/gui.txt
+  config/gui.hs
   config/finite-tunnel.txt
   config/infinite-tunnel.txt
 category: games
 
 library
   exposed-modules: SlingSpace.Configuration
-  other-modules: Math, Logic, MyUtil, Octree, Paths_slingspace
+  other-modules: Math, Logic, MyUtil, Octree, Gui, TerrainGenerator, Obstacles, Paths_slingspace
   build-depends: base, vector, deepseq, MonadRandom, clock, network
   hs-source-dirs: src
   extensions: CPP ForeignFunctionInterface

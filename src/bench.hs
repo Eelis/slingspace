@@ -25,7 +25,7 @@ tunnel = take 1000 `fmap` tu (Vector3 0 0 0)
 
 main :: IO ()
 main = do
-  gpCfg ← loadConfig "gameplay"
+  gpCfg ← loadConfig "config/gameplay.hs"
   let
     tick :: Player → Player
     tick p = case tickPlayer tree gpCfg p of
