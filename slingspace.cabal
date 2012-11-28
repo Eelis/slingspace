@@ -21,7 +21,7 @@ data-files:
 category: games
 
 executable: slingspace
-main-is: local-infinite.hs
+main-is: alone.hs
 hs-source-dirs: src
 ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
 extensions: CPP ForeignFunctionInterface
