@@ -7,13 +7,14 @@ import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), asStoredVertices, V)
 import MyGL ()
 import MyUtil ((.), read_config_file, average, loadConfig)
-import Graphics.UI.GLUT (Vector3(..), Color3(..), GLdouble)
+import Graphics.UI.GLUT (Vector3(..), GLdouble)
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
 import Data.List (genericTake)
 import Control.Monad.Random (evalRandIO, runRand)
 import System.Random (mkStdGen, StdGen)
 import qualified Octree
+import SlingSpace.Configuration (defaultObstacleColor)
 
 playerName :: String
 playerName = "Player"
@@ -44,7 +45,7 @@ main = do
   let
     tree = Octree.fromList bigCube obstacles
     liveForever = immortalize tree gpCfg . live tree gpCfg
-    vertices = asStoredVertices (map (VisualObstacle (Color3 0.9 0.9 0.9)) obstacles)
+    vertices = asStoredVertices (map (VisualObstacle defaultObstacleColor) obstacles)
 
     makeController :: Life -> Life -> StdGen -> Gui.Controller
     makeController (Death _) _ _ = error "died"
