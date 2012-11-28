@@ -23,15 +23,15 @@ import Control.Monad.Random (MonadRandom, getRandomR)
 import Data.Typeable (Typeable)
 
 data GunConfig = GunConfig
-  { ropeForceScale, ropeForceExponent, shootingSpeed, shootingRange :: GLdouble }
-  deriving (Show, Read)
+  { shootingSpeed, shootingRange :: GLdouble
+  , ropeStrength :: GLdouble -> GLdouble }
 
 type GunConfigs = Map Gun GunConfig
 
 data GameplayConfig = GameplayConfig
   { gunConfigs :: GunConfigs
   , friction :: GLdouble, gravity :: V
-  } deriving (Show, Read, Typeable)
+  } deriving Typeable
 
 data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
 
@@ -58,7 +58,7 @@ release :: Gun → Player → Player
 release g p = p { guns = Map.delete g $ guns p }
 
 rope_effect :: GunConfig → V → V
-rope_effect GunConfig{..} off = (off </> l) <*> (ropeForceScale * (l ** ropeForceExponent))
+rope_effect GunConfig{..} off = off <*> (ropeStrength l / l)
   where l = norm_2 off
 
 progressRay :: Ray → Ray
