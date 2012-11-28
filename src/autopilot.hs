@@ -5,7 +5,7 @@ import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTryin
 import qualified Data.Map as Map
 import Math (GeometricObstacle(..), Ray(..))
 import MyGL ()
-import MyUtil ((.), read_config_file, average)
+import MyUtil ((.), read_config_file, average, loadConfig)
 import Data.List (genericTake)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (infinite_tunnel, bigCube)
@@ -27,7 +27,7 @@ a `betterThan` b
 main :: IO ()
 main = do
   tuCfg ← read_config_file "infinite-tunnel.txt"
-  gpCfg ← read_config_file "gameplay.txt"
+  gpCfg ← loadConfig "gameplay"
 
   let
     obstacles :: [GeometricObstacle] = take 1000 $ ((\(_, _, x) -> x) .) $ evalRand (infinite_tunnel tuCfg) (mkStdGen 4)

@@ -4,7 +4,7 @@ import Logic (Player(..), tickPlayer)
 import qualified Data.Map as Map
 import Math (Ray(..), GeometricObstacle, V, (<+>))
 import MyGL ()
-import MyUtil (read_config_file, getMonotonicMilliSecs)
+import MyUtil (getMonotonicMilliSecs, loadConfig)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (bigCube, randomObs)
 import Control.Monad.Random (MonadRandom, evalRand, getRandomR)
@@ -25,10 +25,10 @@ tunnel = take 1000 `fmap` tu (Vector3 0 0 0)
 
 main :: IO ()
 main = do
-  gp_cfg ← read_config_file "gameplay.txt"
+  gpCfg ← loadConfig "gameplay"
   let
     tick :: Player → Player
-    tick p = case tickPlayer tree gp_cfg p of
+    tick p = case tickPlayer tree gpCfg p of
       Left collisionPos -> p{body=Ray collisionPos (Vector3 0 0 0)}
       Right p' -> p'
     tree = Octree.fromList bigCube obstacles

@@ -2,7 +2,7 @@
 
 module MyUtil
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average, loadConfig
   ) where
 
 import Prelude hiding ((.))
@@ -20,6 +20,8 @@ import GHC.Conc (readTVar, writeTVar, atomically, TVar, ThreadId, {-myThreadId,-
 import System.Console.GetOpt (getOpt, OptDescr, ArgOrder(..), usageInfo)
 import System.Clock (getTime, Clock(Monotonic), TimeSpec, sec, nsec)
 import Control.Monad.Random (MonadRandom, getRandomR)
+import Language.Haskell.Interpreter (runInterpreter, loadModules, setImportsQ, interpret, infer)
+import Data.Typeable (Typeable)
 
 #ifdef linux_HOST_OS
 
@@ -50,6 +52,16 @@ simple_getOpt opts s c = do
 
 read_config_file :: Read a ⇒ String → IO a
 read_config_file f = liftM read $ readFile =<< getDataFileName ("config/" ++ f)
+
+loadConfig :: Typeable a ⇒ String → IO a
+loadConfig s = do
+  f <- getDataFileName ("config/" ++ s ++ ".hs")
+  let 
+    i = do
+      loadModules [f]
+      setImportsQ [("SlingSpace.Configuration", Nothing), ("Configuration", Nothing)]
+      interpret "Configuration.config" infer
+  runInterpreter i >>= either (error . show) return
 
 class IOResource a where dealloc :: a → IO ()
 

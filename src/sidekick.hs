@@ -6,7 +6,7 @@ import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, live, Gam
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), asStoredVertices, V)
 import MyGL ()
-import MyUtil ((.), read_config_file, average)
+import MyUtil ((.), read_config_file, average, loadConfig)
 import Graphics.UI.GLUT (Vector3(..), Color3(..), GLdouble)
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
@@ -36,7 +36,7 @@ betterThan target a b
 main :: IO ()
 main = do
   tuCfg ← read_config_file "infinite-tunnel.txt"
-  gpCfg ← read_config_file "gameplay.txt"
+  gpCfg ← loadConfig "gameplay"
 
   obstacles :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tuCfg)
 

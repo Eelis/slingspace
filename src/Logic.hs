@@ -1,10 +1,10 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable #-}
 
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
   , findTarget, fire, release, tickPlayer, move, gunConfigFor
-  , GameplayConfig(..), GunConfigs, GunConfig(shootingRange)
+  , GameplayConfig(..), GunConfigs, GunConfig(..)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, immortalize, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction
   , toFloor
   ) where
@@ -20,6 +20,7 @@ import Prelude hiding ((.))
 import Obstacles (ObstacleTree)
 import qualified Octree
 import Control.Monad.Random (MonadRandom, getRandomR)
+import Data.Typeable (Typeable)
 
 data GunConfig = GunConfig
   { ropeForceScale, ropeForceExponent, shootingSpeed, shootingRange :: GLdouble }
@@ -30,7 +31,7 @@ type GunConfigs = Map Gun GunConfig
 data GameplayConfig = GameplayConfig
   { gunConfigs :: GunConfigs
   , friction :: GLdouble, gravity :: V
-  } deriving (Show, Read)
+  } deriving (Show, Read, Typeable)
 
 data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
 
