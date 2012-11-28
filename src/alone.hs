@@ -6,7 +6,7 @@ import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
 import MyGL ()
-import MyUtil ((.), read_config_file, loadConfig)
+import MyUtil ((.), read_config_file, loadConfig, getDataFileName)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
@@ -27,8 +27,8 @@ trainingWheels = False
 main :: IO ()
 main = do
   tuCfg ← read_config_file "infinite-tunnel.txt"
-  gpCfg@GameplayConfig{gunConfig} ← loadConfig "config/gameplay.hs"
-  guiConfig ← loadConfig "config/gui.hs"
+  gpCfg@GameplayConfig{gunConfig} ← getDataFileName "config/gameplay.hs" >>= loadConfig
+  guiConfig ← getDataFileName "config/gui.hs" >>= loadConfig 
 
   obstacles :: [GeometricObstacle] ← take 1000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tuCfg)
 

@@ -4,7 +4,7 @@ import Logic (Player(..), tickPlayer)
 import qualified Data.Map as Map
 import Math (Ray(..), GeometricObstacle, V, (<+>))
 import MyGL ()
-import MyUtil (getMonotonicMilliSecs, loadConfig)
+import MyUtil (getMonotonicMilliSecs, loadConfig, getDataFileName)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (bigCube, randomObs)
 import Control.Monad.Random (MonadRandom, evalRand, getRandomR)
@@ -25,7 +25,7 @@ tunnel = take 1000 `fmap` tu (Vector3 0 0 0)
 
 main :: IO ()
 main = do
-  gpCfg ← loadConfig "config/gameplay.hs"
+  gpCfg ← getDataFileName "config/gameplay.hs" >>= loadConfig
   let
     tick :: Player → Player
     tick p = case tickPlayer tree gpCfg p of
