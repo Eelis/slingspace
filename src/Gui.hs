@@ -61,8 +61,8 @@ data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } {-| Shad
 data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
   , fov :: GLdouble -- in degrees
-  , cam_init_dist, cam_min_dist, cam_max_dist :: GLdouble
-  , cam_zoom_speed :: GLdouble -- in camera distance multiplication per increment
+  , zoomIn, zoomOut :: GLdouble -> GLdouble
+  , cam_init_dist :: GLdouble
   , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
   }
@@ -171,9 +171,9 @@ onInput
     _| k == pause_key → Just state{paused=not paused}
     _| k == exit_key → Nothing
     _| k == zoom_in_key →
-      Just state{camera=camera{ cam_dist = max (cam_dist camera / cam_zoom_speed) cam_min_dist }}
+      Just state{camera=camera{ cam_dist = zoomIn $ cam_dist camera }}
     _| k == zoom_out_key →
-      Just state{camera=camera{ cam_dist = min (cam_dist camera * cam_zoom_speed) cam_max_dist }}
+      Just state{camera=camera{ cam_dist = zoomOut $ cam_dist camera }}
     _| MouseButton button ← b → do
       Just state{guns=Map.adjust (\gs → gs { fireState = fireStateForKeyState bs }) (gunForButton button) guns}
     _ → Just state
