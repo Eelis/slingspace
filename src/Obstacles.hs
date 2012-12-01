@@ -17,7 +17,7 @@ import Prelude hiding ((.))
 import Control.Monad.Random (MonadRandom(..))
 import qualified Octree
 
-type ObstacleTree = Octree.CubeBox GeometricObstacle
+type ObstacleTree = Octree.CubeBox Cube GeometricObstacle
 
 {-
 aboveSurface :: (Ord a, Floating a) ⇒ Vector3 a → Bool

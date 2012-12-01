@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, PatternGuards #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, PatternGuards, TypeOperators #-}
 
 module Math where
 
@@ -129,23 +129,23 @@ instance NFData Cube
 plane :: AnnotatedTriangle → Plane
 plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
-class FitsInCube o where fitsInCube :: o -> Cube -> Bool
+class FitsIn o c where fitsIn :: o -> c -> Bool
 
-instance FitsInCube (Vector3 GLdouble) where
-  fitsInCube !(Vector3 x y z) !(Cube (Vector3 a b c) cubeSize) =
+instance Vector3 GLdouble `FitsIn` Cube where
+  fitsIn !(Vector3 x y z) !(Cube (Vector3 a b c) cubeSize) =
     a <= x && x <= a + cubeSize &&
     b <= y && y <= b + cubeSize &&
     c <= z && z <= c + cubeSize
       -- todo: this is fugly
 
-instance FitsInCube Sphere where
-  fitsInCube !Sphere{..} c =
-    fitsInCube (sphereCenter <+> Vector3 radius radius radius) c &&
-    fitsInCube (sphereCenter <-> Vector3 radius radius radius) c
+instance Sphere `FitsIn` Cube where
+  fitsIn !Sphere{..} c =
+    fitsIn (sphereCenter <+> Vector3 radius radius radius) c &&
+    fitsIn (sphereCenter <-> Vector3 radius radius radius) c
     where radius = sqrt sphereSquaredRadius
 
-instance FitsInCube GeometricObstacle where
-  fitsInCube = fitsInCube . obstacleSphere
+instance GeometricObstacle `FitsIn` Cube where
+  fitsIn = fitsIn . obstacleSphere
 
 sortPair :: Ord a => (a, a) -> (a, a)
 sortPair !p@(x, y)
