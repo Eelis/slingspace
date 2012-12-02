@@ -455,17 +455,19 @@ f Static{..} o tree playerPos g ClientGunState{..} = do
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
     newTarget = findTarget tree playerPos (shootingRange (gunConfig g))
-      $ cameraRay o playerPos (gunGuiConfig guiConfig g)
+      $ gunRay o playerPos (gunGuiConfig guiConfig g)
 
-cameraDirection :: CameraOrientation -> GunGuiConfig -> V
-cameraDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
+gunDirection :: CameraOrientation -> GunGuiConfig -> V
+gunDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
   `x_rot_vector` (gun_xrot + cam_xrot)
   `y_rot_vector` (gun_yrot + cam_yrot)
 
-cameraRay :: CameraOrientation -> V -> GunGuiConfig -> Ray
-cameraRay c@CameraOrientation{..} playerPos g = Ray
-  (playerPos <-> (Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot))
-  (cameraDirection c g)
+cameraOffset :: CameraOrientation → V
+cameraOffset CameraOrientation{..} =
+  Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot
+
+gunRay :: CameraOrientation → V → GunGuiConfig → Ray
+gunRay c playerPos g = Ray (playerPos <-> cameraOffset c) (gunDirection c g)
 
 guiTick :: String → State → Gui State
 guiTick myname state@State{..} = do
