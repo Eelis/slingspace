@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, UnicodeSyntax, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
 
-module MyUtil
+module Util
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
   , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average, loadConfig
   ) where

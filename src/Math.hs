@@ -5,7 +5,7 @@ module Math where
 import Prelude hiding ((.))
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, Color3(..), Normal3(..), Color4(..), Vertex3(..))
 import Control.Monad
-import MyUtil ((.), tupleToList)
+import Util ((.), tupleToList)
 import Data.Function (on)
 import Data.List (minimumBy)
 import Data.Either (partitionEithers)

@@ -3,7 +3,7 @@
 import Logic (Player(..), tickPlayer)
 import qualified Data.Map as Map
 import Math (Ray(..), GeometricObstacle, V, (<+>))
-import MyUtil (getMonotonicMilliSecs, loadConfig, getDataFileName)
+import Util (getMonotonicMilliSecs, loadConfig, getDataFileName)
 import Graphics.UI.GLUT (Vector3(..))
 import Obstacles (bigCube, randomObs)
 import Control.Monad.Random (MonadRandom, evalRand, getRandomR)

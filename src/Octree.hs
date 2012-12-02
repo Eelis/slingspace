@@ -4,7 +4,7 @@ module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
 import Math (Collision(collide), FitsIn(fitsIn), Cube(..), (<*>), (<+>))
-import MyUtil (orElse)
+import Util (orElse)
 import Control.DeepSeq (NFData)
 
 import Data.Vector (Vector)

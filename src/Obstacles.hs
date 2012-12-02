@@ -9,7 +9,7 @@ module Obstacles
   , ObstacleTree
   ) where
 
-import MyUtil ((.), bounded)
+import Util ((.), bounded)
 import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision, Cube(..))
 import Control.Monad (replicateM)
 import Graphics.UI.GLUT (GLdouble, Vector3(..))

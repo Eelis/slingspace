@@ -4,7 +4,7 @@ import Playback (playback)
 import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction)
 import qualified Data.Map as Map
 import Math (GeometricObstacle(..), Ray(..), VisualObstacle(..))
-import MyUtil ((.), read_config_file, average, loadConfig, getDataFileName)
+import Util ((.), read_config_file, average, loadConfig, getDataFileName)
 import Data.List (genericTake)
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
 import Obstacles (infinite_tunnel, bigCube)

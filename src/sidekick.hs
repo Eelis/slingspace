@@ -5,7 +5,7 @@ import qualified Gui
 import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, live, GameplayConfig(..), future, immortalize, reviseIfWise, positions, tryRandomAction)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), asStoredVertices, V)
-import MyUtil ((.), read_config_file, average, loadConfig, getDataFileName)
+import Util ((.), read_config_file, average, loadConfig, getDataFileName)
 import Graphics.UI.GLUT (Vector3(..), GLdouble)
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
