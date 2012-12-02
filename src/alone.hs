@@ -1,8 +1,8 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns, ViewPatterns #-}
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, Life(..), lifeAfter, lifeExpectancyUpto, immortalize, live, gunConfig, GameplayConfig(..))
+import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, immortalize, live, gunConfig, GameplayConfig(..))
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
 import MyGL ()
@@ -45,10 +45,9 @@ main = do
       , release = \g -> consider (release g p)
       , fire = \g v -> consider (fire (gunConfig g) g v p) }
       where
-        consider new = if not trainingWheels || (l' `betterThan` l)
-            then Just $ makeController (Life new (immortalize tree gpCfg l'))
-            else Nothing
-          where l' = lifeAfter tree gpCfg new
+        consider (live tree gpCfg → l')
+          | not trainingWheels || (l' `betterThan` l) = Just $ makeController $ immortalize tree gpCfg l'
+          | otherwise = Nothing
 
   gui
     (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
