@@ -3,7 +3,7 @@
 module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), CameraOrientation(..), gui) where
 
 import Data.Map (Map)
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
+import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
 import Data.Maybe (isJust)
@@ -11,7 +11,6 @@ import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), positions, birth, GunConfig(shootingRange))
-import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, getMonotonicMilliSecs, whenJust, loadConfig)
 import Prelude hiding ((.), mapM)
@@ -113,6 +112,11 @@ data Controller = Controller
 
 
 
+rotateRadians :: (Floating c, MatrixComponent c) ⇒ c → Vector3 c → IO ()
+rotateRadians r = rotate (r / pi * 180)
+
+green :: Color4 GLclampf
+green = Color4 0 1 0 1
 
 initialGuns :: Guns
 initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]

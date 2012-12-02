@@ -3,7 +3,6 @@
 module Math where
 
 import Prelude hiding ((.))
-import MyGL ()
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, Color3(..), Normal3(..), Color4(..), Vertex3(..))
 import Control.Monad
 import MyUtil ((.), tupleToList)

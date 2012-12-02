@@ -7,7 +7,6 @@ module MyUtil
 
 import Prelude hiding ((.))
 import Data.IORef (IORef, readIORef, writeIORef)
-import MyGL ()
 import Data.List (minimumBy, genericLength)
 import Graphics.UI.GLUT ()
 import Network.Socket (Socket, sClose, send, recv)
