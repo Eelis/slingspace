@@ -41,7 +41,7 @@ main = do
     makeController :: Life -> Gui.Controller
     makeController l@(Life p f) = Gui.Controller
       { players = Map.singleton name l
-      , tick = return (Nothing, makeController f)
+      , tick = makeController f
       , release = \g -> consider (release g p)
       , fire = \g v -> consider (fire (gunConfig g) g v p) }
       where
@@ -51,7 +51,8 @@ main = do
 
   gui
     (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
-    (vertices, tree)
+    vertices
+    tree
     name
     guiConfig
     gunConfig

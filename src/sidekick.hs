@@ -51,7 +51,7 @@ main = do
     makeController (Death _) _ _ = error "died"
     makeController l@(Life p _) ai prng = Gui.Controller
       { players = Map.fromList [(playerName, l), ("HAL", ai)]
-      , tick = return (Nothing, mc (future l) (future ai) prng)
+      , tick = mc (future l) (future ai) prng
       , release = \g -> Just $ mc (liveForever $ release g p) ai prng
       , fire = \g v -> Just $ mc (liveForever $ fire (gunConfig g) g v p) ai prng }
     mc altered oldAi prng = makeController altered alteredAI prng'
@@ -64,7 +64,8 @@ main = do
       (live tree gpCfg -- ai (not immortal otherwise it won't be motivated to try to survive)
         (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty))
       (mkStdGen 3))
-    (vertices, tree)
+    vertices
+    tree
     playerName
     guiConfig
     gunConfig

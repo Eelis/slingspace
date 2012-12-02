@@ -12,8 +12,7 @@ import qualified SlingSpace.Configuration
 playbackController :: Life -> Controller
 playbackController l = fix $ \self -> Controller
   { players = Map.singleton "jimmy" l
-  , tick = do
-    return (Nothing, case l of Life _ l' -> playbackController l'; Death _ -> self)
+  , tick = case l of Life _ l' -> playbackController l'; Death _ -> self
   , release = const Nothing
   , Gui.fire = const (const Nothing) }
 
@@ -21,7 +20,8 @@ playback :: [VisualObstacle] -> ObstacleTree -> GuiConfig -> CameraOrientation -
   -- non-interactive display of a life
 playback obstacles tree guiConfig cam life = gui
   (playbackController life)
-  (asStoredVertices obstacles, tree)
+  (asStoredVertices obstacles)
+  tree
   "jimmy"
   guiConfig
   (const SlingSpace.Configuration.def)

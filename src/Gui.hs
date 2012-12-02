@@ -85,7 +85,8 @@ data Static = Static
   , scheme :: Scheme
   , guiConfig :: GuiConfig
   , gunConfig :: Gun -> GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
-  }
+  , obstacleCount :: Int
+  , tree :: ObstacleTree }
 
 type Gui = ReaderT Static IO
 
@@ -101,15 +102,11 @@ data State = State
   { controller :: Controller
   , paused :: Bool
   , camera :: CameraOrientation
-  , guns :: Guns
-  , obstacleCount :: Int
-  , tree :: ObstacleTree }
-
-type ObstacleUpdate = (SV.Vector StoredVertex, ObstacleTree)
+  , guns :: Guns }
 
 data Controller = Controller
   { players :: Players
-  , tick :: IO (Maybe ObstacleUpdate, Controller)
+  , tick :: Controller
   , release :: Gun → Maybe Controller
   , fire :: Gun → V → Maybe Controller }
   -- release and fire return Maybes so that the controller can say "nope, you can't release/fire now"
@@ -135,7 +132,7 @@ onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myn
   whenJust (Map.lookup myname players >>= birth) $ \me → do
   lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers (Map.mapMaybe birth players)
-  drawObstacles obstacleCount
+  drawObstacles
   lift $ lighting $= Disabled
   --lift $ drawFutures players
   --drawTree tree
@@ -334,8 +331,8 @@ drawOrientation players = do
     vertex $ tov $ rayOrigin body <+> Vector3 0 0 100
   return ()
 
-drawObstacles :: Int → Gui ()
-drawObstacles obstacleCount = do
+drawObstacles :: Gui ()
+drawObstacles = do
   Static{scheme=Scheme{..}, ..} ← ask
   lift $ do
   
@@ -381,8 +378,8 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: Controller → ObstacleUpdate → String → GuiConfig → (Gun -> GunConfig) → CameraOrientation → IO ()
-gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig initialOrientation = do
+gui :: Controller → SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun -> GunConfig) → CameraOrientation → IO ()
+gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientation = do
 
   deepseq tree $ do
 
@@ -390,13 +387,12 @@ gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig in
     ← getDataFileName "schemes" >>= loadConfig . (++ "/" ++ schemeFile)
 
   let
+    obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
     initialState = State
       { controller = controller
       , paused = True
       , camera = initialOrientation
-      , guns = initialGuns
-      , obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
-      , tree = tree }
+      , guns = initialGuns }
 
   GLUT.getArgsAndInitialize
 
@@ -437,16 +433,16 @@ gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig in
   GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
 
   [obstacleBuffer] ← GLUT.genObjectNames 1
-  let size = fromIntegral (obstacleCount initialState) * TerrainGenerator.bytesPerObstacle
+  let size = fromIntegral obstacleCount * TerrainGenerator.bytesPerObstacle
   GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
   GLUT.bufferData GLUT.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GLUT.StaticDraw)
 
   runReaderT (setupCallbacks initialState name) Static{..}
   GLUT.mainLoop
 
-f :: Static -> CameraOrientation -> ObstacleTree -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
+f :: Static -> CameraOrientation -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
   -- todo: rename
-f Static{..} o tree playerPos g ClientGunState{..} = do
+f Static{..} o playerPos g ClientGunState{..} = do
     c <- CMS.get
     newFireState <- case (newTarget, fireState) of
       (Just t, FireAsap) | Just c' <- fire c g t → CMS.put c' >> return Fired
@@ -483,14 +479,5 @@ guiTick myname state@State{..} = do
   case Map.lookup myname (players controller) >>= birth of
     Nothing → return state
     Just Player{body} → do
-      let
-        (newGuns, newController) = CMS.runState (Map.traverseWithKey (f static camera tree (rayOrigin body)) guns) controller
-      (mx, c) <- lift $ tick newController
-      case mx of
-        Nothing -> return state{controller=c, guns=newGuns}
-        Just (a, newTree) -> do
-          let newObstacleCount = SV.length a `div` TerrainGenerator.verticesPerObstacle
-          lift $ GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-          lift $ GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0
-              (fromIntegral newObstacleCount * TerrainGenerator.bytesPerObstacle) (SVP.ptr (SVP.cons a))
-          return state{controller=c, obstacleCount=newObstacleCount, tree=newTree,guns=newGuns}
+      let (newGuns, newController) = CMS.runState (Map.traverseWithKey (f static camera (rayOrigin body)) guns) controller
+      return state{controller=tick newController, guns=newGuns}
