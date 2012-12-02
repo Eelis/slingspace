@@ -154,9 +154,10 @@ onReshape CameraConfig{..} s@(GLUT.Size w h) = do
   GLUT.perspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
   GLUT.matrixMode $= GLUT.Modelview 0
 
-gunForButton :: MouseButton -> Gun
-gunForButton LeftButton = LeftGun
-gunForButton _ = RightGun
+gunForButton :: MouseButton -> Maybe Gun
+gunForButton LeftButton = Just LeftGun
+gunForButton RightButton = Just RightGun
+gunForButton _ = Nothing
 
 fireStateForKeyState :: KeyState → FireState
 fireStateForKeyState Down = FireAsap
@@ -173,8 +174,8 @@ onInput
       Just state{camera=camera{ cam_dist = zoomIn $ cam_dist camera }}
     _| k == zoom_out_key →
       Just state{camera=camera{ cam_dist = zoomOut $ cam_dist camera }}
-    _| MouseButton button ← b → do
-      Just state{guns=Map.adjust (\gs → gs { fireState = fireStateForKeyState bs }) (gunForButton button) guns}
+    _| MouseButton (gunForButton → Just g) ← b → do
+      Just state{guns=Map.adjust (\gs → gs { fireState = fireStateForKeyState bs }) g guns}
     _ → Just state
  where k = (b, bs)
 
