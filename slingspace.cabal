@@ -22,7 +22,7 @@ category: games
 
 library
   exposed-modules: SlingSpace.Configuration
-  other-modules: Math, Logic, MyUtil, Octree, Gui, TerrainGenerator, Obstacles, Paths_slingspace
+  other-modules: Math, Logic, MyUtil, Octree, Gui, Obstacles, Paths_slingspace
   build-depends: base, vector, deepseq, MonadRandom, clock, network
   hs-source-dirs: src
   extensions: CPP ForeignFunctionInterface

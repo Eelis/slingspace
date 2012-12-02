@@ -291,9 +291,16 @@ data GeometricObstacle = GeometricObstacle
   , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
 
-trianglesPerObstacle, verticesPerTriangle :: Num a => a
+bytesPerVertex, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle, trianglesPerObstacle, verticesPerTriangle :: Num a => a
 trianglesPerObstacle = 4
 verticesPerTriangle = 3
+verticesPerObstacle = trianglesPerObstacle * verticesPerTriangle
+bytesPerObstacle = trianglesPerObstacle * bytesPerTriangle
+bytesPerTriangle = verticesPerTriangle * bytesPerVertex
+bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
+bytesPerDouble = fromIntegral $ sizeOf (undefined :: Double)
+bytesPerVector = fromIntegral $ sizeOf (undefined :: Vector3 GLdouble)
+
 
 instance NFData GeometricObstacle
 

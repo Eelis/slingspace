@@ -5,7 +5,7 @@ module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorCo
 import Data.Map (Map)
 import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
 import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
@@ -25,7 +25,6 @@ import Data.Typeable (Typeable)
 
 import qualified Octree
 import qualified Logic
-import qualified TerrainGenerator
 import qualified Data.StorableVector as SV
 import qualified Data.StorableVector.Pointer as SVP
 import qualified Data.Map as Map
@@ -387,7 +386,7 @@ gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initi
     ← getDataFileName "schemes" >>= loadConfig . (++ "/" ++ schemeFile)
 
   let
-    obstacleCount = SV.length storedObstacles `div` TerrainGenerator.verticesPerObstacle
+    obstacleCount = SV.length storedObstacles `div` verticesPerObstacle
     initialState = State
       { controller = controller
       , paused = True
@@ -433,7 +432,7 @@ gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initi
   GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
 
   [obstacleBuffer] ← GLUT.genObjectNames 1
-  let size = fromIntegral obstacleCount * TerrainGenerator.bytesPerObstacle
+  let size = fromIntegral obstacleCount * bytesPerObstacle
   GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
   GLUT.bufferData GLUT.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GLUT.StaticDraw)
 
