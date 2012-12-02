@@ -151,7 +151,7 @@ onReshape CameraConfig{..} s@(GLUT.Size w h) = do
   GLUT.viewport $= (Position 0 0, s)
   GLUT.matrixMode $= GLUT.Projection
   GLUT.loadIdentity
-  GLUT.perspective fov (fromIntegral w / fromIntegral h) 0.1 viewing_dist
+  GLUT.perspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
   GLUT.matrixMode $= GLUT.Modelview 0
 
 gunForButton :: MouseButton -> Gun
@@ -399,7 +399,7 @@ gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig in
 
   GLUT.getArgsAndInitialize
 
-  GLUT.initialDisplayMode $= [GLUT.DoubleBuffered, GLUT.WithDepthBuffer, GLUT.WithAlphaComponent, GLUT.RGBAMode]
+  GLUT.initialDisplayMode $= [GLUT.DoubleBuffered, GLUT.WithDepthBuffer, GLUT.RGBMode]
   GLUT.createWindow windowTitle
   GLUT.depthFunc $= Just GLUT.Lequal
   GLUT.clearColor $= fog_color
@@ -438,10 +438,7 @@ gui controller (storedObstacles, tree) name guiConfig@GuiConfig{..} gunConfig in
   [obstacleBuffer] ← GLUT.genObjectNames 1
   let size = fromIntegral (obstacleCount initialState) * TerrainGenerator.bytesPerObstacle
   GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-  GLUT.bufferData GLUT.ArrayBuffer $= (size, nullPtr, GLUT.DynamicDraw)
-  GLUT.bufferSubData GLUT.ArrayBuffer GLUT.WriteToBuffer 0 size (SVP.ptr (SVP.cons storedObstacles))
-    -- todo: merge into one
-  GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
+  GLUT.bufferData GLUT.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GLUT.StaticDraw)
 
   runReaderT (setupCallbacks initialState name) Static{..}
   GLUT.mainLoop

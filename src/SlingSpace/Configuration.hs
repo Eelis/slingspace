@@ -29,7 +29,7 @@ instance Default GameplayConfig where
 
 instance Default CameraConfig where
   def = CameraConfig
-    { viewing_dist = 30000
+    { viewing_dist = 50000
     , fov = 45
     , zoomIn = max 40 . (/ 1.1)
     , zoomOut = min 5000 . (* 1.1)
