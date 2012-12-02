@@ -6,7 +6,7 @@ import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, live, Gam
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle(..), Ray(..), asStoredVertices, V)
 import Util ((.), read_config_file, average, loadConfig, getDataFileName)
-import Graphics.UI.GLUT (Vector3(..), GLdouble)
+import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble)
 import Obstacles (infinite_tunnel, bigCube)
 import Prelude hiding ((.))
 import Data.List (genericTake)

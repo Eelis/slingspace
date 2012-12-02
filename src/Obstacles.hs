@@ -12,7 +12,7 @@ module Obstacles
 import Util ((.), bounded)
 import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, obst_min_y, collision, Cube(..))
 import Control.Monad (replicateM)
-import Graphics.UI.GLUT (GLdouble, Vector3(..))
+import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
 import Prelude hiding ((.))
 import Control.Monad.Random (MonadRandom(..))
 import qualified Octree

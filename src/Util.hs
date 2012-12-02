@@ -8,7 +8,6 @@ module Util
 import Prelude hiding ((.))
 import Data.IORef (IORef, readIORef, writeIORef)
 import Data.List (minimumBy, genericLength)
-import Graphics.UI.GLUT ()
 import Network.Socket (Socket, sClose, send, recv)
 import Control.Monad (liftM, forever)
 import Control.Exception (bracket)

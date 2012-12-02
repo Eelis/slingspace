@@ -11,7 +11,7 @@ module Logic
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Graphics.UI.GLUT (GLdouble, Vector3(..))
+import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
 import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
 import Util ((.), randomItem)
 import Data.Maybe (listToMaybe)

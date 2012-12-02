@@ -29,6 +29,7 @@ import qualified Data.StorableVector.Pointer as SVP
 import qualified Data.Map as Map
 import qualified Graphics.UI.GLUT as GLUT
 import qualified Control.Monad.State as CMS
+import qualified Graphics.Rendering.OpenGL.GL as GL
 
 deriving instance Read Key
 deriving instance Read KeyState
@@ -79,7 +80,7 @@ data GuiConfig = GuiConfig
   } deriving Typeable
 
 data Static = Static
-  { obstacleBuffer :: GLUT.BufferObject
+  { obstacleBuffer :: GL.BufferObject
   , scheme :: Scheme
   , guiConfig :: GuiConfig
   , gunConfig :: Gun -> GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
@@ -124,16 +125,16 @@ initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, 
 onDisplay :: State → String → Gui ()
 onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myname = do
   lift $ do
-    GLUT.clear [ColorBuffer, DepthBuffer]
-    GLUT.loadIdentity
-    GLUT.translate $ Vector3 0 0 (- cam_dist)
+    GL.clear [ColorBuffer, DepthBuffer]
+    GL.loadIdentity
+    GL.translate $ Vector3 0 0 (- cam_dist)
     lighting $= Enabled
-    GLUT.position ballLight $= Vertex4 30 30 100 1
+    GL.position ballLight $= Vertex4 30 30 100 1
     rotateRadians cam_xrot $ Vector3 1 0 0
     rotateRadians cam_yrot $ Vector3 0 1 0
 
   whenJust (Map.lookup myname players >>= birth) $ \me → do
-  lift $ GLUT.translate $ (rayOrigin $ body me) <*> (-1)
+  lift $ GL.translate $ (rayOrigin $ body me) <*> (-1)
   drawPlayers (Map.mapMaybe birth players)
   drawObstacles
   lift $ lighting $= Disabled
@@ -146,13 +147,13 @@ onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myn
   drawCrossHairs guns
   lift swapBuffers
 
-onReshape :: CameraConfig → GLUT.Size → IO ()
-onReshape CameraConfig{..} s@(GLUT.Size w h) = do
-  GLUT.viewport $= (Position 0 0, s)
-  GLUT.matrixMode $= GLUT.Projection
-  GLUT.loadIdentity
+onReshape :: CameraConfig → GL.Size → IO ()
+onReshape CameraConfig{..} s@(GL.Size w h) = do
+  GL.viewport $= (Position 0 0, s)
+  GL.matrixMode $= GL.Projection
+  GL.loadIdentity
   GLUT.perspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
-  GLUT.matrixMode $= GLUT.Modelview 0
+  GL.matrixMode $= GL.Modelview 0
 
 gunForButton :: MouseButton -> Maybe Gun
 gunForButton LeftButton = Just LeftGun
@@ -238,8 +239,8 @@ setupCallbacks initialState name = do
 
 -- Drawers:
 
-ballLight :: GLUT.Light
-ballLight = GLUT.Light 0
+ballLight :: GL.Light
+ballLight = GL.Light 0
 
 drawFloor :: {-[AnnotatedTriangle] →-} Player → Gui ()
 drawFloor {-visible_obs-} Player{..} = do
@@ -255,7 +256,7 @@ drawFloor {-visible_obs-} Player{..} = do
         mapM (vertex . tov . toFloor) . tupleToList . triangleVertices
 -}
     Grid{..} → do
-      GLUT.color grid_color
+      GL.color grid_color
       let
         Vector3 x _ z = rayOrigin body
         funky h = fromInteger (h' - (h' `mod` grid_size)) :: GLdouble where h' = round h :: Integer
@@ -263,15 +264,15 @@ drawFloor {-visible_obs-} Player{..} = do
         vd = viewing_dist
       case grid_type of
         LinedGrid{..} → do
-          GLUT.lineWidth $= grid_line_width
+          GL.lineWidth $= grid_line_width
           renderPrimitive Lines $
             forM_ [-vd, -vd + (fromInteger grid_size) .. vd] $ \n →
               mapM (vertex . tov) $
                 [ Vector3 (aligned_x + n) 0 (z - vd), Vector3 (aligned_x + n) 0 (z + vd)
                 , Vector3 (x - vd) 0 (aligned_z + n), Vector3 (x + vd) 0 (aligned_z + n) ]
         DottedGrid{..} → do
-          GLUT.pointSize $= grid_dot_size
-          GLUT.renderPrimitive Points $
+          GL.pointSize $= grid_dot_size
+          GL.renderPrimitive Points $
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               vertex $ tov $ Vector3 x' 0 z'
 
@@ -293,16 +294,16 @@ drawCrossHairs guns = do
   scheme ← asks scheme
   guiConfig ← asks guiConfig
   lift $ do
-  GLUT.lineWidth $= 3
-  GLUT.pointSize $= 4
+  GL.lineWidth $= 3
+  GL.pointSize $= 4
   forM_ (Map.toList guns) $ \(g, gu) → do
     let GunGuiConfig{..} = gunGuiConfig guiConfig g
-    GLUT.color $ gunColor scheme g
-    GLUT.loadIdentity
+    GL.color $ gunColor scheme g
+    GL.loadIdentity
     rotateRadians gun_xrot $ Vector3 (-1) 0 0
     rotateRadians gun_yrot $ Vector3 0 (-1) 0
-    GLUT.renderPrimitive Points $ vertex $ Vertex3 (0 :: GLdouble) 0 (-100)
-    when (isJust $ target gu) $ GLUT.renderPrimitive LineLoop $ mapM_ vertex
+    GL.renderPrimitive Points $ vertex $ Vertex3 (0 :: GLdouble) 0 (-100)
+    when (isJust $ target gu) $ GL.renderPrimitive LineLoop $ mapM_ vertex
       [ Vertex3 (-1 :: GLdouble) 0 (-100)
       , Vertex3 (0 :: GLdouble) (-1) (-100)
       , Vertex3 (1 :: GLdouble) 0 (-100)
@@ -313,10 +314,10 @@ drawRopes players = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
-  GLUT.lineWidth $= rope_line_width
+  GL.lineWidth $= rope_line_width
   renderPrimitive Lines $ forM players $ \player@Player{..} →
     forM_ (Map.toList (Logic.guns player)) $ \(gun, Rope{..}) → do
-        GLUT.color $ gunColor gun
+        GL.color $ gunColor gun
         vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
   return ()
@@ -326,7 +327,7 @@ drawOrientation players = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
-  GLUT.lineWidth $= rope_line_width
+  GL.lineWidth $= rope_line_width
   renderPrimitive Lines $ forM players $ \Player{..} → do
     vertex $ tov $ rayOrigin body <+> Vector3 (-100) 0 0
     vertex $ tov $ rayOrigin body <+> Vector3 100 0 0
@@ -339,45 +340,45 @@ drawObstacles = do
   Static{scheme=Scheme{..}, ..} ← ask
   lift $ do
   
-  GLUT.materialDiffuse Front $= Color4 1 1 1 1
-  GLUT.materialAmbient Front $= Color4 0.4 0.6 0.8 1
-  GLUT.clientState GLUT.VertexArray $= Enabled
-  GLUT.clientState GLUT.NormalArray $= Enabled
-  GLUT.clientState GLUT.ColorArray $= Enabled
-  GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
+  GL.materialDiffuse Front $= Color4 1 1 1 1
+  GL.materialAmbient Front $= Color4 0.4 0.6 0.8 1
+  GL.clientState GL.VertexArray $= Enabled
+  GL.clientState GL.NormalArray $= Enabled
+  GL.clientState GL.ColorArray $= Enabled
+  GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
   let bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
   let bytesPerVector = fromIntegral $ sizeOf (undefined :: Vector3 GLdouble)
-  GLUT.arrayPointer GLUT.VertexArray
-    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (0 * bytesPerVector))
-  GLUT.arrayPointer GLUT.NormalArray
-    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (1 * bytesPerVector))
-  GLUT.arrayPointer GLUT.ColorArray
-    $= GLUT.VertexArrayDescriptor 3 GLUT.Double bytesPerVertex (plusPtr nullPtr (2 * bytesPerVector))
+  GL.arrayPointer GL.VertexArray
+    $= GL.VertexArrayDescriptor 3 GL.Double bytesPerVertex (plusPtr nullPtr (0 * bytesPerVector))
+  GL.arrayPointer GL.NormalArray
+    $= GL.VertexArrayDescriptor 3 GL.Double bytesPerVertex (plusPtr nullPtr (1 * bytesPerVector))
+  GL.arrayPointer GL.ColorArray
+    $= GL.VertexArrayDescriptor 3 GL.Double bytesPerVertex (plusPtr nullPtr (2 * bytesPerVector))
 
   let totalVertices = obstacleCount * trianglesPerObstacle * verticesPerTriangle
-  GLUT.drawArrays Triangles 0 (fromIntegral totalVertices)
-  GLUT.bindBuffer GLUT.ArrayBuffer $= Nothing
-  GLUT.clientState GLUT.VertexArray $= Disabled
-  GLUT.clientState GLUT.NormalArray $= Disabled
-  GLUT.clientState GLUT.ColorArray $= Disabled
+  GL.drawArrays Triangles 0 (fromIntegral totalVertices)
+  GL.bindBuffer GL.ArrayBuffer $= Nothing
+  GL.clientState GL.VertexArray $= Disabled
+  GL.clientState GL.NormalArray $= Disabled
+  GL.clientState GL.ColorArray $= Disabled
 
 drawPlayers :: Map String Player → Gui ()
 drawPlayers players = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
-  GLUT.materialAmbient Front $= ball_material_ambient
-  GLUT.materialDiffuse Front $= ball_material_diffuse
-  forM players $ \Player{..} → GLUT.preservingMatrix $ do
+  GL.materialAmbient Front $= ball_material_ambient
+  GL.materialDiffuse Front $= ball_material_diffuse
+  forM players $ \Player{..} → GL.preservingMatrix $ do
     --print (rayOrigin body)
-    GLUT.translate $ rayOrigin body
+    GL.translate $ rayOrigin body
     GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
   return ()
 
 drawFutures :: Players → IO ()
 drawFutures players = do
-  GLUT.color green
-  forM_ (Map.elems players) $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
+  GL.color green
+  forM_ (Map.elems players) $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
 -- Entry point:
 
@@ -401,44 +402,44 @@ gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initi
 
   GLUT.initialDisplayMode $= [GLUT.DoubleBuffered, GLUT.WithDepthBuffer, GLUT.RGBMode]
   GLUT.createWindow windowTitle
-  GLUT.depthFunc $= Just GLUT.Lequal
-  GLUT.clearColor $= fog_color
-  GLUT.lineWidth $= 3 -- Todo: Make configurable.
-  GLUT.pointSize $= 4 -- Todo: Make configurable.
-  GLUT.cullFace $= Just Back
+  GL.depthFunc $= Just GL.Lequal
+  GL.clearColor $= fog_color
+  GL.lineWidth $= 3 -- Todo: Make configurable.
+  GL.pointSize $= 4 -- Todo: Make configurable.
+  GL.cullFace $= Just Back
 
   if ugly
    then do
-    GLUT.lineSmooth $= Disabled
-    GLUT.pointSmooth $= Disabled
-    GLUT.normalize $= Disabled
-    GLUT.shadeModel $= GLUT.Flat
-    hint GLUT.LineSmooth $= GLUT.Fastest
-    hint GLUT.PointSmooth $= GLUT.Fastest
+    GL.lineSmooth $= Disabled
+    GL.pointSmooth $= Disabled
+    GL.normalize $= Disabled
+    GL.shadeModel $= GL.Flat
+    hint GL.LineSmooth $= GL.Fastest
+    hint GL.PointSmooth $= GL.Fastest
    else do
-    GLUT.lineSmooth $= Enabled
-    GLUT.pointSmooth $= Enabled
-    GLUT.shadeModel $= GLUT.Smooth
-    hint GLUT.LineSmooth $= GLUT.Nicest
-    hint GLUT.PointSmooth $= GLUT.Nicest
+    GL.lineSmooth $= Enabled
+    GL.pointSmooth $= Enabled
+    GL.shadeModel $= GL.Smooth
+    hint GL.LineSmooth $= GL.Nicest
+    hint GL.PointSmooth $= GL.Nicest
 
-  GLUT.fog $= Enabled
-  GLUT.fogMode $= GLUT.Exp2 fog_density
-  GLUT.fogColor $= fog_color
-  GLUT.lightModelAmbient $= lightModel_ambient
-  GLUT.light ballLight $= Enabled
-  GLUT.ambient ballLight $= ballLight_ambient
-  GLUT.diffuse ballLight $= ballLight_diffuse
-  GLUT.attenuation ballLight $= ballLight_attenuation
-  GLUT.colorMaterial $= Just (FrontAndBack, AmbientAndDiffuse)
+  GL.fog $= Enabled
+  GL.fogMode $= GL.Exp2 fog_density
+  GL.fogColor $= fog_color
+  GL.lightModelAmbient $= lightModel_ambient
+  GL.light ballLight $= Enabled
+  GL.ambient ballLight $= ballLight_ambient
+  GL.diffuse ballLight $= ballLight_diffuse
+  GL.attenuation ballLight $= ballLight_attenuation
+  GL.colorMaterial $= Just (FrontAndBack, AmbientAndDiffuse)
 
-  GLUT.blend $= Enabled
-  GLUT.blendFunc $= (GLUT.SrcAlpha, GLUT.OneMinusSrcAlpha)
+  GL.blend $= Enabled
+  GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
 
-  [obstacleBuffer] ← GLUT.genObjectNames 1
+  [obstacleBuffer] ← GL.genObjectNames 1
   let size = fromIntegral obstacleCount * bytesPerObstacle
-  GLUT.bindBuffer GLUT.ArrayBuffer $= Just obstacleBuffer
-  GLUT.bufferData GLUT.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GLUT.StaticDraw)
+  GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
+  GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GL.StaticDraw)
 
   runReaderT (setupCallbacks initialState name) Static{..}
   GLUT.mainLoop
