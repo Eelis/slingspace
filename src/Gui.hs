@@ -10,7 +10,7 @@ import Data.Maybe (isJust)
 import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), moments, birth, GunConfig(shootingRange))
+import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), positions, birth, GunConfig(shootingRange))
 import MyGL (rotateRadians, green)
 import System.Exit (exitWith, ExitCode(ExitSuccess))
 import MyUtil ((.), getDataFileName, getMonotonicMilliSecs, whenJust, loadConfig)
@@ -376,7 +376,7 @@ drawPlayers players = do
 drawFutures :: Players → IO ()
 drawFutures players = do
   GLUT.color green
-  forM_ (Map.elems players) $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov . rayOrigin . body) . take 500 . moments
+  forM_ (Map.elems players) $ GLUT.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
 -- Entry point:
 
