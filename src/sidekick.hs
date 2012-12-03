@@ -57,16 +57,17 @@ main = do
       where (alteredAI, prng') = runRand (reviseIfWise (tryRandomAction (betterThan (positions altered)) tree gpCfg) oldAi) prng
 
   gui
-    (makeController
-      (liveForever -- player
-        (Player (Ray (Vector3 0 4000 (-3000)) (Vector3 0 0 0)) Map.empty))
-      (live tree gpCfg -- ai (not immortal otherwise it won't be motivated to try to survive)
-        (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty))
-      (mkStdGen 3))
     vertices
     tree
     playerName
     guiConfig
     gunConfig
     SlingSpace.Configuration.def
-    
+    (makeController
+      (liveForever -- player
+        (Player (Ray (Vector3 0 4000 (-3000)) (Vector3 0 0 0)) Map.empty))
+      (live tree gpCfg -- ai (not immortal otherwise it won't be motivated to try to survive)
+        (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty))
+      (mkStdGen 3))
+
+  return ()

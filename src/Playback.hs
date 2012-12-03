@@ -19,10 +19,10 @@ playbackController l = fix $ \self -> Controller
 playback :: [VisualObstacle] -> ObstacleTree -> GuiConfig -> CameraOrientation -> Life -> IO ()
   -- non-interactive display of a life
 playback obstacles tree guiConfig cam life = gui
-  (playbackController life)
   (asStoredVertices obstacles)
   tree
   "jimmy"
   guiConfig
   (const SlingSpace.Configuration.def)
   cam
+  (playbackController life) >> return ()

@@ -49,10 +49,12 @@ main = do
           | otherwise = Nothing
 
   gui
-    (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
     vertices
     tree
     name
     guiConfig
     gunConfig
     SlingSpace.Configuration.def
+    (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
+
+  return ()

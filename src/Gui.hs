@@ -11,7 +11,6 @@ import Control.Monad (when, forM_)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), positions, birth, GunConfig(shootingRange))
-import System.Exit (exitWith, ExitCode(ExitSuccess))
 import Util ((.), getDataFileName, getMonotonicMilliSecs, whenJust, loadConfig)
 import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
@@ -192,8 +191,8 @@ onMotion CameraConfig{..} c@CameraOrientation{..} cursorPosRef p@(Position x y) 
       cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed }
     else c
 
-setupCallbacks :: State → String → Gui ()
-setupCallbacks initialState name = do
+glutLoop :: State → String → Gui State
+glutLoop initialState name = do
   context@Static
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
   lift $ do
@@ -215,17 +214,20 @@ setupCallbacks initialState name = do
     --writeIORef lastDisplayTime new
   GLUT.keyboardMouseCallback $= Just (\x y _ _ → do
     s <- readIORef stateRef
-    newState <- maybe (exitWith ExitSuccess) return (onInput guiConfig x y s)
-    writeIORef stateRef newState
-    when (paused s /= paused newState) $ do
-      let
-        (cursor, mc) = if paused newState then (GLUT.Inherit, Nothing) else (GLUT.None, Just $ \qq → do
-          state <- readIORef stateRef
-          newCam <- onMotion camConf (camera state) cursorPos qq
-          writeIORef stateRef $ state{camera=newCam})
-      GLUT.cursor $= cursor
-      GLUT.motionCallback $= mc
-      GLUT.passiveMotionCallback $= mc)
+
+    case onInput guiConfig x y s of
+      Nothing -> GLUT.leaveMainLoop
+      Just newState -> do
+        writeIORef stateRef newState
+        when (paused s /= paused newState) $ do
+          let
+            (cursor, mc) = if paused newState then (GLUT.Inherit, Nothing) else (GLUT.None, Just $ \qq → do
+              state <- readIORef stateRef
+              newCam <- onMotion camConf (camera state) cursorPos qq
+              writeIORef stateRef $ state{camera=newCam})
+          GLUT.cursor $= cursor
+          GLUT.motionCallback $= mc
+          GLUT.passiveMotionCallback $= mc)
 
   (getMonotonicMilliSecs >>=) $ fix $ \self next → do
     state <- readIORef stateRef
@@ -236,6 +238,11 @@ setupCallbacks initialState name = do
     if tn >= next
       then self next'
       else GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
+
+  GLUT.actionOnWindowClose $= GLUT.MainLoopReturns
+  GLUT.mainLoop
+  readIORef stateRef
+
 
 -- Drawers:
 
@@ -382,8 +389,9 @@ drawFutures players = do
 
 -- Entry point:
 
-gui :: Controller → SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun -> GunConfig) → CameraOrientation → IO ()
-gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientation = do
+gui :: SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun → GunConfig) → CameraOrientation →
+  Controller → IO Controller
+gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientation initialController = do
 
   deepseq tree $ do
 
@@ -393,7 +401,7 @@ gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initi
   let
     obstacleCount = SV.length storedObstacles `div` verticesPerObstacle
     initialState = State
-      { controller = controller
+      { controller = initialController
       , paused = True
       , camera = initialOrientation
       , guns = initialGuns }
@@ -441,8 +449,7 @@ gui controller storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initi
   GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
   GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GL.StaticDraw)
 
-  runReaderT (setupCallbacks initialState name) Static{..}
-  GLUT.mainLoop
+  controller . runReaderT (glutLoop initialState name) Static{..}
 
 f :: Static -> CameraOrientation -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
   -- todo: rename
