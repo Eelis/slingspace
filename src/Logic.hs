@@ -12,7 +12,7 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough)
+import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough, inner_prod)
 import Util ((.), randomItem, orElse)
 import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
@@ -51,8 +51,13 @@ fire c g mt p = p { guns = case mt of
   Just t → Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
 
 rope_effect :: GunConfig → V → V
-rope_effect GunConfig{..} off = off <*> (ropeStrength l / l)
-  where l = norm_2 off
+rope_effect GunConfig{ropeStrength} off =
+  if p >= 0.1
+    then off <*> (ropeStrength l / l)
+    else Vector3 0 0 0
+  where
+    p = inner_prod off off
+    l = sqrt p
 
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
