@@ -5,12 +5,12 @@ module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridTy
 import Data.Map (Map)
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), positions, birth, GunConfig(shootingRange))
+import Logic (Player(Player,body), Gun(..), Rope(..), Life(..), positions, birth, GunConfig(shootingRange), collisionPoint)
 import Util ((.), getDataFileName, whenJust, loadConfig)
 import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
@@ -444,8 +444,8 @@ f Static{..} o playerPos g ClientGunState{..} = do
       _ → return fireState
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
-    newTarget = findTarget tree playerPos (shootingRange (gunConfig g))
-      $ gunRay o playerPos (gunGuiConfig guiConfig g)
+    r = gunRay o playerPos (gunConfig g) (gunGuiConfig guiConfig g)
+    newTarget = collisionPoint r (Octree.query r tree >>= obstacleTriangles)
 
 gunDirection :: CameraOrientation → GunGuiConfig → V
 gunDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
@@ -456,8 +456,8 @@ cameraOffset :: CameraOrientation → V
 cameraOffset CameraOrientation{..} =
   Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot
 
-gunRay :: CameraOrientation → V → GunGuiConfig → Ray
-gunRay c playerPos g = Ray (playerPos <-> cameraOffset c) (gunDirection c g)
+gunRay :: CameraOrientation → V → GunConfig → GunGuiConfig → Ray
+gunRay c playerPos d g = Ray (playerPos <-> cameraOffset c) (gunDirection c g <*> shootingRange d)
 
 guiTick :: Controller c ⇒ State c → Gui (State c)
 guiTick state@State{..} = do

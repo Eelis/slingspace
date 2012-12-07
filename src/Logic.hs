@@ -3,7 +3,7 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , findTarget, fire, tickPlayer, move
+  , collisionPoint, fire, tickPlayer, move
   , GameplayConfig(..), GunConfig(..)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction, safeFuture
   , toFloor
@@ -12,8 +12,8 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, dist_sqrd, square, Ray(..), collision, Cube(..), triangleCenter)
-import Util ((.), randomItem)
+import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough)
+import Util ((.), randomItem, orElse)
 import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
 import Obstacles (ObstacleTree)
@@ -71,20 +71,14 @@ tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
         (applyForce cfg (Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect (gunConfig g) (pp <-> rayOrigin); _ → m) rayDirection guns))
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
-      | otherwise = (\(_, x, _) → x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
-    filteredObstacles = Octree.query body tree
-      -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate) 
+      | otherwise = collisionPoint body (Octree.query body tree >>= obstacleTriangles)
+      -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate)
 
 move :: V → Player → Player
 move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
-findTarget :: ObstacleTree → V → GLdouble → Ray → Maybe V
-findTarget tree playerPos shooting_range gunRay@(Ray gunOrigin gunDirection) =
-  (\(_, x, _) → x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
-    (filteredObstacles >>= obstacleTriangles)
-  where
-    filteredObstacles = Octree.query longGunRay tree
-    longGunRay = Ray gunOrigin (gunDirection <*> shooting_range) -- todo
+collisionPoint :: Ray → [AnnotatedTriangle] → Maybe V
+collisionPoint r@Ray{..} t = (rayOrigin <+>) . (rayDirection <*>) . fst . collision r t
 
 data Life = Life Player Life | Death V
 
@@ -145,12 +139,13 @@ randomAction tree cfg now = do
   if i == 0
     then return $ fire cfg LeftGun Nothing now
     else do
-      c ← randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
-      return $ fire cfg LeftGun (Just c) now
+      c ← triangleCenter . randomItem nearby
+      return $ fire cfg LeftGun (Just (collisionPoint (rayThrough (rayOrigin $ body now) c) nearby `orElse` c)) now
   where
     s = shootingRange cfg
     here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
-    nearby = Octree.query here tree
+    nearby = Octree.query here tree >>= obstacleTriangles
+
 
 randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
 randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfig gpCfg LeftGun)

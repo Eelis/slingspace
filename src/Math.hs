@@ -8,6 +8,7 @@ import Control.Monad
 import Util ((.), tupleToList)
 import Data.Function (on)
 import Data.List (minimumBy)
+import Data.Tuple (swap)
 import Data.Either (partitionEithers)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA3)
@@ -218,32 +219,30 @@ instance Collision Ray Sphere Bool where
 sameDirection :: V → V → Bool
 sameDirection a b = inner_prod a b >= 0
 
-instance Collision (Ray, GLdouble → V → Bool) AnnotatedTriangle (Maybe (GLdouble, V)) where
+instance Collision Ray AnnotatedTriangle (Maybe GLdouble) where
   collide a b = isJust $ collision a b
-  collision !(Ray{..}, inter_pred) !AnnotatedTriangle{..} = do
+  collision !Ray{..} !AnnotatedTriangle{..} = do
     let
       (a, _, _) = triangleVertices
       Vector3 h i j = matrix_vector_mult toTriangleCoords (rayOrigin <-> a)
       Vector3 k l m = matrix_vector_mult toTriangleCoords rayDirection
-      coll = rayOrigin <+> (rayDirection <*> eta)
       eta = - j / m
       v = h + k * eta
       w = i + l * eta
-    guard $ eta >= 0 && inter_pred eta coll && v >= 0 && w >= 0 && v + w <= 1
-    return (eta, coll)
-      -- The predicate is integrated because applying it after-the-fact is more expensive, because by that time the three inner_prods have already been evaluated.
+    guard $ 0 <= eta && eta <= 1 && 0 <= v && 0 <= w && v + w <= 1
+    return eta
 
 matrix_vector_mult :: Num a ⇒ Matrix33 a → Vector3 a → Vector3 a
 matrix_vector_mult !(Matrix33 a b c) d = Vector3 (inner_prod a d) (inner_prod b d) (inner_prod c d)
 
-instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GLdouble, V, AnnotatedTriangle)) where
+instance Collision Ray [AnnotatedTriangle] (Maybe (GLdouble, AnnotatedTriangle)) where
   collide a b = isJust $ collision a b
   collision ray triangles
       | null collisions = Nothing
-      | otherwise = Just $ minimumBy (compare `on` (\(_,x,_) → x)) collisions
+      | otherwise = Just $ minimumBy (compare `on` fst) collisions
     where
-      collisions :: [(GLdouble, V, AnnotatedTriangle)]
-      collisions = (\(x,(y,z)) → (y,z,x)) . mapMaybe (\triangle → (,) triangle . (ray `collision` triangle)) triangles
+      collisions :: [(GLdouble, AnnotatedTriangle)]
+      collisions = swap . mapMaybe (\triangle → (,) triangle . (ray `collision` triangle)) triangles
 
 data StoredVertex = StoredVertex
   { storedPosition, storedNormal :: !(Vector3 GLdouble), storedColor :: !(Color3 GLdouble) }
@@ -283,7 +282,7 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
       h t' . lineLoop (tupleToList $ triangleVertices t) ++ h t . lineLoop (tupleToList $ triangleVertices t')
     where
       h :: AnnotatedTriangle → (V, V) → Bool
-      h u (x, y) = isJust $  (rayThrough x y, \(z::GLdouble) (_::V) → z < 1) `collision` u
+      h u (x, y) = rayThrough x y `collide` u
 
 data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
