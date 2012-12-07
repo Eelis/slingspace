@@ -33,7 +33,7 @@ instance Default CameraConfig where
   def = CameraConfig
     { viewing_dist = 50000
     , fov = 45
-    , wheelBounds = (-5,5)
+    , wheelBounds = (-10,5)
     , zoom = fromIntegral . (120 +) . (* 20) . (^ (2::Int)) . (5 -)
     , mouse_speed = 573
     , invert_mouse = True }
