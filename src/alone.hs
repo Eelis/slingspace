@@ -1,7 +1,6 @@
 {-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns #-}
 
 import Gui (gui)
-import qualified Gui
 import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
@@ -11,7 +10,7 @@ import Obstacles (infinite_tunnel, bigCube, ObstacleTree)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRandIO)
 import Guided (Guided(..))
-import Controllers (Controller, BasicController(..))
+import Controllers (Controller(..), BasicController(..))
 import Stalker (Stalker(Stalker))
 import qualified Recorder
 import System.Random (mkStdGen)
@@ -32,7 +31,7 @@ instance Controller C where
   player = Just . life
   tick c@C{..} = c{life=safeFuture (controllerObstacles c) (controllerGpCfg c) life}
   fire g v c@C{..} = do
-    l ← live (controllerObstacles c) (controllerGpCfg c) . fire (gunConfig gpCfg g) g v . birth life
+    l ← live (controllerObstacles c) (controllerGpCfg c) . Logic.fire (gunConfig gpCfg g) g v . birth life
     return c{life=l}
 
 main :: IO ()

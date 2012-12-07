@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf, FlexibleInstances #-}
 
-module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui, players) where
+module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
 
 import Data.Map (Map)
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
