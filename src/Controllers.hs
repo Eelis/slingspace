@@ -2,7 +2,7 @@
 
 module Controllers (Controller(..), BasicController(..), players) where
 
-import Logic (Life, Gun, GameplayConfig)
+import Logic (Life, Gun, GameplayConfig, future)
 import Obstacles (ObstacleTree)
 import Math (V)
 import Util (Any(Any))
@@ -28,7 +28,9 @@ instance Controller (Any Controller) where -- ghc /should/ be able to generate t
 players :: Controller c => c → [Life]
 players c = maybeToList (player c) ++ others c
 
-instance Controller Life where player = Just
+instance Controller Life where
+  player = Just
+  tick = future
 
 
 class Controller c => BasicController c where
