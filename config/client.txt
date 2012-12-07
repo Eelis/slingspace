@@ -1,5 +1,0 @@
-ClientConfig
-{ player_name = SystemUserName
-, default_host = "localhost"
-, default_port = 51733
-}

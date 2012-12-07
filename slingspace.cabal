@@ -11,13 +11,8 @@ tested-with: GHC==7.4
 data-files:
   doc/manual.xhtml
   schemes/cool.hs
-  schemes/woods.hs
   config/gameplay.hs
-  config/client.txt
-  config/server.txt
   config/gui.hs
-  config/finite-tunnel.txt
-  config/infinite-tunnel.txt
 category: games
 
 library
@@ -36,13 +31,6 @@ executable slingspace
 
 executable slingspace-autopilot
   main-is: autopilot.hs
-  hs-source-dirs: src
-  ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
-  extensions: CPP ForeignFunctionInterface
-  build-depends: base, GLURaw, GLFW-b, OpenGL>=2.0, random, containers, mtl, clock, MonadRandom, deepseq, storablevector, storable-tuple, storable-record, vector, hint
-
-executable slingspace-bench
-  main-is: bench.hs
   hs-source-dirs: src
   ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
   extensions: CPP ForeignFunctionInterface

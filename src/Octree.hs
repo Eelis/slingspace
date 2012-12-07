@@ -3,7 +3,7 @@
 module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
-import Math (Collision(collide), FitsIn(fitsIn), Cube(..), (<*>), (<+>))
+import Math (Collision(collide), FitsIn(fitsIn), Cube(..), (<*>), (<+>), (<->), (</>))
 import Util (orElse)
 import Control.DeepSeq (NFData)
 
@@ -15,10 +15,12 @@ type Subs c a = Vector (c, Maybe (Box c a))
 class Splittable t where split :: t → [t]
 
 instance Splittable Cube where
-  split Cube{..} = [Cube (cubeCorner <+> (i <*> subOff)) subSize | i ← subIds]
+  split Cube{..} =
+      [Cube p (p <+> subSize) | i ← subIds, let p = cubeLoCorner <+> (t i subOff)]
     where
-      subOff = cubeSize / 3
-      subSize = subOff * 2
+      subOff = (cubeHiCorner <-> cubeLoCorner) </> 3
+      subSize = subOff <*> 2
+      t (Vector3 x y z) (Vector3 a b c) = Vector3 (x * a) (y * b) (z * c)
       subIds =
         [ Vector3 0 0 0
         , Vector3 0 0 1
@@ -89,6 +91,8 @@ fromList c = foldl insert (empty c)
 
 subs :: CubeBox c a → [CubeBox c a]
 subs (_, Box{subBoxes}) = [ (c, b) | (c, Just b) ← Vector.toList subBoxes ]
+
+-- collision detection may yield false positives, but no false negatives
 
 query :: Collision q c x ⇒ q → CubeBox c a → [a]
 query !q = go

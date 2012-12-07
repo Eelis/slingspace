@@ -149,8 +149,7 @@ randomAction tree cfg now = do
   where
     p = rayOrigin (body now)
     s = shootingRange cfg
-    nearby = Octree.query (Cube (p <-> Vector3 s s s) (s*2)) tree >>= obstacleTriangles
-
+    nearby = Octree.query (Cube (p <-> Vector3 s s s) (p <+> Vector3 s s s)) tree >>= obstacleTriangles
 
 randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
 randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfig gpCfg LeftGun)

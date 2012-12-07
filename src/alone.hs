@@ -3,18 +3,19 @@
 import Gui (gui)
 import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth)
 import qualified Data.Map as Map
-import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
-import Util ((.), read_config_file, loadConfig, getDataFileName, Any(Any))
+import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices, randomAngle, unitCirclePoint, (<+>), (<*>))
+import Util ((.), loadConfig, getDataFileName, Any(Any))
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
-import Obstacles (infinite_tunnel, bigCube, ObstacleTree)
+import Obstacles (ObstacleTree, grow, randomObs)
 import Prelude hiding ((.))
+import Control.Monad (replicateM, liftM2)
 import Control.Monad.Random (evalRandIO)
 import Guided (Guided(..))
 import Controllers (Controller(..), BasicController(..))
 import Stalker (Stalker(Stalker))
-import qualified Recorder
+-- import qualified Recorder
 import System.Random (mkStdGen)
-import qualified Octree
+import Control.Monad.Random (MonadRandom(..))
 import qualified SlingSpace.Configuration
 
 trainingWheels, sideKick :: Bool
@@ -34,25 +35,34 @@ instance Controller C where
     l ← live (controllerObstacles c) (controllerGpCfg c) . Logic.fire (gunConfig gpCfg g) g v . birth life
     return c{life=l}
 
+rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
+rawObstacles = replicateM 700 $
+  liftM2 (<+>)
+    ((<*> 30000) . unitCirclePoint . randomAngle)
+    (getRandomR (Vector3 (-1500) 0 (-1500), Vector3 1500 3000 1500))
+      >>= randomObs 800
+
 main :: IO ()
 main = do
-  tuCfg ← read_config_file "infinite-tunnel.txt"
   gpCfg@GameplayConfig{gunConfig} ← getDataFileName "config/gameplay.hs" >>= loadConfig
   guiConfig ← getDataFileName "config/gui.hs" >>= loadConfig 
 
-  obstacles :: [GeometricObstacle] ← take 2000 . ((\(_, _, x) → x) .) . evalRandIO (infinite_tunnel tuCfg)
+  (tree, obstacles) ← grow . evalRandIO rawObstacles
+
+  putStrLn $ show (length obstacles) ++ " obstacles."
 
   let
-    tree = Octree.fromList bigCube obstacles
     vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
-    initialPosition = Vector3 0 1800 (-2000)
+    initialPosition = Vector3 0 1800 30000
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
     stalker = live tree gpCfg (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty)
 
-  r ← gui vertices tree guiConfig gunConfig pi $
-    Recorder.record $
+  {-r ←-}
+  gui vertices tree guiConfig gunConfig 0 $
+    --Recorder.record $
     (if trainingWheels then Any . Guided else id) $
     (if sideKick then Any . Stalker stalker (mkStdGen 3) else id) $
     (Any C{obstacles=tree, life=live tree gpCfg initialPlayer, ..} :: Any BasicController)
 
-  putStrLn $ show (length (Recorder.frames r)) ++ " frames."
+  --putStrLn $ show (length (Recorder.frames r)) ++ " frames."
+  return ()

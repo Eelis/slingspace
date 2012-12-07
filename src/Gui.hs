@@ -5,7 +5,7 @@ module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridTy
 import Data.Map (Map)
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
@@ -257,6 +257,7 @@ drawFloor {-visible_obs-} Player{..} = do
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               vertex $ tov $ Vector3 x' 0 z'
 
+{-
 drawTree :: ObstacleTree → Gui ()
 drawTree = lift . renderPrimitive Lines . go Nothing
   where
@@ -269,6 +270,7 @@ drawTree = lift . renderPrimitive Lines . go Nothing
       case mp of
         Nothing → return ()
         Just p → mapM_ (vertex . tov) [center, p]
+-}
 
 drawCrossHairs :: Guns → Gui ()
 drawCrossHairs guns = do

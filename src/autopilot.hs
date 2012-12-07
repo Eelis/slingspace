@@ -4,15 +4,16 @@ import Playback (playback)
 import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction)
 import qualified Data.Map as Map
 import Math (GeometricObstacle(..), Ray(..), VisualObstacle(..))
-import Util ((.), read_config_file, average, loadConfig, getDataFileName)
+import Util ((.), average, loadConfig, getDataFileName, getMonotonicMilliSecs)
 import Data.List (genericTake)
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
-import Obstacles (infinite_tunnel, bigCube)
+import Obstacles (grow, randomObs)
 import Prelude hiding ((.))
-import Control.Monad.Random (evalRand)
+import Control.Monad (replicateM)
+import Control.Monad.Random (evalRand, MonadRandom(..))
 import System.Random (mkStdGen)
+import Control.DeepSeq (deepseq)
 import qualified SlingSpace.Configuration
-import qualified Octree
 
 betterThan :: Life → Life → Bool
 a `betterThan` b
@@ -24,21 +25,32 @@ a `betterThan` b
       value = average . map ((\(Vector3 _ y z) → y+z) . rayOrigin . body) . genericTake lookahead . moments
       lookahead = 400
 
+rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
+rawObstacles = replicateM 300 $
+  getRandomR (Vector3 (-1500) 0 0, Vector3 1500 3000 100000)
+    >>= randomObs 800
+
+benchmark :: Bool
+benchmark = False
+
 main :: IO ()
 main = do
-  tuCfg ← read_config_file "infinite-tunnel.txt"
-
   gpCfg ← getDataFileName "config/gameplay.hs" >>= loadConfig
   guiConfig ← getDataFileName "config/gui.hs" >>= loadConfig
 
   let
-    obstacles :: [GeometricObstacle] = take 1000 $ ((\(_, _, x) → x) .) $ evalRand (infinite_tunnel tuCfg) (mkStdGen 4)
-    tree = Octree.fromList bigCube obstacles
+    (tree, obstacles) = grow $ evalRand rawObstacles (mkStdGen 4)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
-    life = keepTrying (tryRandomAction betterThan tree gpCfg) (live tree gpCfg initialPlayer)
+    life = evalRand (keepTrying (tryRandomAction betterThan tree gpCfg) (live tree gpCfg initialPlayer)) (mkStdGen 3)
 
-  playback
-    (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
-    tree guiConfig pi
-    (evalRand life (mkStdGen 3))
+  if benchmark
+    then deepseq tree $ do
+      t ← getMonotonicMilliSecs
+      print $ length $ moments life
+      t' ← getMonotonicMilliSecs
+      print $ t' - t
+    else playback
+      (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
+      tree guiConfig pi
+      life

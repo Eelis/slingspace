@@ -122,7 +122,8 @@ newtype OriginRay = OriginRay V
 data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
 data Plane = Plane { planeNormal, planePoint :: !V }
 data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Read, Show)
-data Cube = Cube { cubeCorner :: !(Vector3 GLdouble), cubeSize :: !GLdouble } deriving (Read, Show)
+data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) } deriving (Read, Show)
+  -- Cube invariant: components of lo <= hi
 
 instance NFData Cube
 
@@ -132,11 +133,10 @@ plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 class FitsIn o c where fitsIn :: o → c → Bool
 
 instance Vector3 GLdouble `FitsIn` Cube where
-  fitsIn !(Vector3 x y z) !(Cube (Vector3 a b c) cubeSize) =
-    a <= x && x <= a + cubeSize &&
-    b <= y && y <= b + cubeSize &&
-    c <= z && z <= c + cubeSize
-      -- todo: this is fugly
+  fitsIn !(Vector3 x y z) !(Cube (Vector3 a b c) (Vector3 a' b' c')) =
+    a <= x && x <= a' &&
+    b <= y && y <= b' &&
+    c <= z && z <= c'
 
 instance Sphere `FitsIn` Cube where
   fitsIn !Sphere{..} c =
@@ -175,23 +175,23 @@ instance Ord a ⇒ Collision (Range a) (Range a) (Maybe (Range a)) where
 
 instance Collision Cube Cube Bool where -- should really be done for cuboids with a cuboid result
   collide = collision
-  collision (Cube (Vector3 x y z) s) (Cube (Vector3 x' y' z') s') =
-    collide (Range x (x+s)) (Range x' (x'+s')) &&
-    collide (Range y (y+s)) (Range y' (y'+s')) &&
-    collide (Range z (z+s)) (Range z' (z'+s'))
+  collision (Cube (Vector3 x y z) (Vector3 a b c)) (Cube (Vector3 x' y' z') (Vector3 a' b' c')) =
+    collide (Range x a) (Range x' a') &&
+    collide (Range y b) (Range y' b') &&
+    collide (Range z c) (Range z' c')
 
 instance Collision (Vector3 GLdouble) Cube Bool where
   collide = collision
-  collision !(Vector3 x y z) !Cube{cubeCorner=Vector3 a b c, cubeSize} =
-    inRange x (Range a (a + cubeSize)) &&
-    inRange y (Range b (b + cubeSize)) &&
-    inRange z (Range c (c + cubeSize))
+  collision !(Vector3 x y z) !(Cube (Vector3 a b c) (Vector3 a' b' c')) =
+    inRange x (Range a a') &&
+    inRange y (Range b b') &&
+    inRange z (Range c c')
 
 instance Collision Ray Cube Bool where
   collide = collision
   collision
     !Ray{rayOrigin=rayOrigin@(Vector3 rox roy roz), rayDirection=rayDirection@(Vector3 rdx rdy rdz)}
-    !cube@Cube{cubeCorner=Vector3 ccx ccy ccz,..} =
+    !cube@(Cube (Vector3 ccx ccy ccz) (Vector3 cex cey cez)) =
       not wayOff && (allInside || (and bs && (null rs || maximum (0 : map fst rs) <= minimum (1 : map snd rs))))
     where
       wayOff =
@@ -200,7 +200,7 @@ instance Collision Ray Cube Bool where
         (roz <= ccz && rez <= ccz) || (cez <= roz && cez <= rez)
       allInside = collision rayOrigin cube && collision (rayOrigin <+> rayDirection) cube
       rayEnd@(Vector3 rex rey rez) = rayOrigin <+> rayDirection
-      cubeOppCorner@(Vector3 cex cey cez) = Vector3 (ccx + cubeSize) (ccy + cubeSize) (ccz + cubeSize)
+      --cubeOppCorner@(Vector3 cex cey cez) = Vector3 (ccx + cubeSize) (ccy + cubeSize) (ccz + cubeSize)
       (bs, rs) = partitionEithers [iX, iY, iZ]
       rs' = (0, 1) : rs
       iX = st rox rdx (Range ccx cex)
@@ -289,6 +289,25 @@ data GeometricObstacle = GeometricObstacle
   , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
 
+triangleCube :: AnnotatedTriangle -> Cube
+triangleCube AnnotatedTriangle{triangleVertices=(Vector3 x y z, Vector3 x' y' z', Vector3 x'' y'' z'')} =
+  Cube
+    (Vector3 (x `min` x' `min` x'') (y `min` y' `min` y'') (z `min` z' `min` z''))
+    (Vector3 (x `max` x' `max` x'') (y `max` y' `max` y'') (z `max` z' `max` z''))
+
+enclosingCube :: Cube -> Cube -> Cube
+enclosingCube (Cube (Vector3 x y z) (Vector3 a b c)) (Cube (Vector3 x' y' z') (Vector3 a' b' c')) =
+  Cube (Vector3 (min x x') (min y y') (min z z')) (Vector3 (max a a') (max b b') (max c c'))
+
+obstacleCube :: GeometricObstacle → Cube
+obstacleCube GeometricObstacle{obstacleTriangles} =
+  foldr1 enclosingCube (map triangleCube obstacleTriangles)
+    -- todo: different fold maybe
+
+instance Collision GeometricObstacle Cube Bool where
+  collide = collision
+  collision = collision . obstacleCube
+
 bytesPerVertex, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle, trianglesPerObstacle, verticesPerTriangle :: Num a ⇒ a
 trianglesPerObstacle = 4
 verticesPerTriangle = 3
@@ -328,17 +347,6 @@ tri_in_obstacle o = or . (point_in_obstacle o .) .  tupleToList . triangleVertic
 instance Collision GeometricObstacle GeometricObstacle Bool where
   collide = collision
   collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
-
-at_max_z :: AnnotatedTriangle → GLdouble
-at_max_z (AnnotatedTriangle _ (Vector3 _ _ z0, Vector3 _ _ z1, Vector3 _ _ z2) _ _) =
-  z0 `max` z1 `max` z2
-
-at_min_y :: AnnotatedTriangle → GLdouble
-at_min_y (AnnotatedTriangle _ (Vector3 _ y0 _, Vector3 _ y1 _, Vector3 _ y2 _) _ _) =
-  y0 `min` y1 `min` y2
-
-obst_min_y :: GeometricObstacle → GLdouble
-obst_min_y = minimum . (at_min_y .) . obstacleTriangles
 
 data MMatrix a = MMatrix !a !a !a !a !a !a !a !a !a deriving Show
 
@@ -388,3 +396,9 @@ dist_sqrd v w = let d = v <-> w in inner_prod d d
 
 modIntegralPart :: RealFrac r ⇒ r → Integer → r
 modIntegralPart (properFraction → (i, f)) n = fromInteger (i `mod` n) + f
+
+randomAngle :: (MonadRandom m, Floating f, Random f) ⇒ m f
+randomAngle = getRandomR (0, 2 * pi)
+
+unitCirclePoint :: GLdouble → V
+unitCirclePoint a = Vector3 (sin a) 0 (cos a)
