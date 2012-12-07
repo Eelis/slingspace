@@ -62,7 +62,7 @@ main = do
     playerName
     guiConfig
     gunConfig
-    SlingSpace.Configuration.def
+    pi
     (makeController
       (liveForever -- player
         (Player (Ray (Vector3 0 4000 (-3000)) (Vector3 0 0 0)) Map.empty))

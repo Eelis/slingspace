@@ -54,7 +54,7 @@ main = do
     name
     guiConfig
     gunConfig
-    SlingSpace.Configuration.def
+    pi
     (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
 
   return ()

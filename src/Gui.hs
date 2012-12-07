@@ -1,20 +1,21 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, StandaloneDeriving, PatternGuards, NamedFieldPuns, DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf #-}
 
-module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), CameraOrientation(..), gui) where
+module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
 
 import Data.Map (Map)
-import Graphics.UI.GLUT (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), Position(..), vertex, Flavour(..), MouseButton(..), PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), KeyState(..), Capability(..), Key(..), hint, renderPrimitive, swapBuffers, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, wrap, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
+
+import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
+import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
 import Data.Maybe (isJust)
-import Control.Monad (when, forM_)
+import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
 import Logic (Player(Player,body), Gun(..), Rope(..), findTarget, Life(..), positions, birth, GunConfig(shootingRange))
-import Util ((.), getDataFileName, getMonotonicMilliSecs, whenJust, loadConfig)
+import Util ((.), getDataFileName, whenJust, loadConfig)
 import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
-import Foreign.Ptr (nullPtr, plusPtr)
+import Foreign.Ptr (nullPtr, plusPtr, Ptr)
 import Foreign.Storable (sizeOf)
 import Data.Traversable (mapM)
 import Control.DeepSeq (deepseq)
@@ -26,14 +27,10 @@ import qualified Logic
 import qualified Data.StorableVector as SV
 import qualified Data.StorableVector.Pointer as SVP
 import qualified Data.Map as Map
-import qualified Graphics.UI.GLUT as GLUT
+import qualified Graphics.UI.GLFW as GLFW
 import qualified Control.Monad.State as CMS
 import qualified Graphics.Rendering.OpenGL.GL as GL
-
-deriving instance Read Key
-deriving instance Read KeyState
-deriving instance Read MouseButton
-deriving instance Read GLUT.SpecialKey
+import qualified Graphics.Rendering.GLU.Raw as GLU
 
 -- Static data:
 
@@ -59,7 +56,8 @@ data FloorConfig = Grid { grid_size :: Integer, grid_type :: GridType } {-| Shad
 data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
   , fov :: GLdouble -- in degrees
-  , zoomIn, zoomOut :: GLdouble -> GLdouble
+  , wheelBounds :: (Int ,Int)
+  , zoom :: Int → GLdouble
   , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
   }
@@ -74,12 +72,14 @@ data GuiConfig = GuiConfig
   , playerSize :: GLdouble
   , camConf :: CameraConfig
   , schemeFile :: String
-  , restart_key, pause_key, exit_key, zoom_in_key, zoom_out_key :: (Key, KeyState)
-  , tickDuration :: Integer -- in milliseconds
+  , restart_key, pause_key, exit_key :: GLFW.Key
+  , gunForButton :: GLFW.MouseButton → Maybe Gun
+  , tickDuration :: Double -- in seconds
   } deriving Typeable
 
 data Static = Static
   { obstacleBuffer :: GL.BufferObject
+  , bodyQuadric :: Ptr GLU.GLUquadric
   , scheme :: Scheme
   , guiConfig :: GuiConfig
   , gunConfig :: Gun -> GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
@@ -121,8 +121,8 @@ green = Color4 0 1 0 1
 initialGuns :: Guns
 initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
 
-onDisplay :: State → String → Gui ()
-onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myname = do
+drawEverything :: State → String → Gui ()
+drawEverything State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myname = do
   lift $ do
     GL.clear [ColorBuffer, DepthBuffer]
     GL.loadIdentity
@@ -144,103 +144,86 @@ onDisplay State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myn
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
   drawCrossHairs guns
-  lift swapBuffers
 
-onReshape :: CameraConfig → GL.Size → IO ()
-onReshape CameraConfig{..} s@(GL.Size w h) = do
-  GL.viewport $= (Position 0 0, s)
+
+onReshape :: CameraConfig → GLFW.WindowSizeCallback
+onReshape CameraConfig{..} w h = do
+  GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
   GL.matrixMode $= GL.Projection
   GL.loadIdentity
-  GLUT.perspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
+  GLU.gluPerspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
   GL.matrixMode $= GL.Modelview 0
 
-gunForButton :: MouseButton -> Maybe Gun
-gunForButton LeftButton = Just LeftGun
-gunForButton RightButton = Just RightGun
-gunForButton _ = Nothing
-
-fireStateForKeyState :: KeyState → FireState
-fireStateForKeyState Down = FireAsap
-fireStateForKeyState Up = ReleaseAsap
-
-onInput :: GuiConfig → Key → KeyState → State → Maybe State
-onInput
+onKey :: GuiConfig → GLFW.Key → State → State
+onKey
     GuiConfig{camConf=CameraConfig{..}, ..}
-    b bs state@State{controller=Controller{..}, ..} = do
-  case () of
-    _| k == pause_key → Just state{paused=not paused}
-    _| k == exit_key → Nothing
-    _| k == zoom_in_key →
-      Just state{camera=camera{ cam_dist = zoomIn $ cam_dist camera }}
-    _| k == zoom_out_key →
-      Just state{camera=camera{ cam_dist = zoomOut $ cam_dist camera }}
-    _| MouseButton (gunForButton → Just g) ← b → do
-      Just state{guns=Map.adjust (\gs → gs { fireState = fireStateForKeyState bs }) g guns}
-    _ → Just state
- where k = (b, bs)
+    k state@State{controller=Controller{..}, ..}
+  | k == pause_key = state{paused=not paused}
+  | otherwise = state
 
-onMotion :: CameraConfig → CameraOrientation → IORef Position → Position → IO CameraOrientation
-onMotion CameraConfig{..} c@CameraOrientation{..} cursorPosRef p@(Position x y) = do
-  Position x' y' ← readIORef cursorPosRef
-  let q = Position (wrap x 100 400) (wrap y 100 400) -- Todo: This is no good.
-  writeIORef cursorPosRef q
-  when (q /= p) $ GLUT.pointerPosition $= q
-  return $ if abs (x - x') + abs (y - y') < 200
-    then c {
-      cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral (y' - y) / mouse_speed),
-      cam_yrot = cam_yrot + fromIntegral (x - x') / mouse_speed }
-    else c
+keyCallback :: GuiConfig → IORef State → GLFW.KeyCallback
+keyCallback guiConfig@GuiConfig{camConf=CameraConfig{..}} stateRef k b = when b $ do
+  let
+    updateOrientation x y c@CameraOrientation{..} = c{
+      cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral y / mouse_speed),
+      cam_yrot = cam_yrot + fromIntegral x / mouse_speed }
+  s ← readIORef stateRef
+  let s' = onKey guiConfig k s
+  writeIORef stateRef s'
+  when (paused s /= paused s') $
+    if paused s'
+      then do
+        GLFW.setMousePositionCallback $ \_ _ → return ()
+        GLFW.enableMouseCursor
+      else do
+        GLFW.disableMouseCursor
+        r ← GLFW.getMousePosition >>= newIORef
+        GLFW.setMousePositionCallback $ \x' y' → do
+          (x, y) ← readIORef r
+          writeIORef r (x', y')
+          modifyIORef' stateRef $ \st → st{camera=updateOrientation (x' - x) (y' - y) (camera st)}
 
-glutLoop :: State → String → Gui State
-glutLoop initialState name = do
+glfwLoop :: State → String → Gui State
+glfwLoop initialState name = do
   context@Static
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
   lift $ do
 
-  cursorPos ← newIORef $ Position 0 0
   stateRef ← newIORef initialState
 
-  --lastDisplayTime ← getMonotonicMilliSecs >>= newIORef
+  GLFW.setWindowBufferSwapInterval 1
 
-  GLUT.reshapeCallback $= Just (onReshape camConf)
+  GLFW.setWindowSizeCallback (onReshape camConf)
+  GLFW.setKeyCallback $ keyCallback guiConfig stateRef
+  GLFW.setMouseWheelCallback $ \p → let (l, u) = wheelBounds in if
+      | p < l → GLFW.setMouseWheel l
+      | p > u → GLFW.setMouseWheel u
+      | otherwise → modifyIORef' stateRef $ \s → s{camera=(camera s){ cam_dist = zoom p } }
+  GLFW.setMouseButtonCallback $ \but b → case gunForButton but of
+    Just g → modifyIORef' stateRef $ \s →
+      s{guns=Map.adjust (\gs → gs { fireState = if b then FireAsap else ReleaseAsap }) g (guns s)}
+    Nothing → return ()
 
-  GLUT.displayCallback $= do
+  closeRef ← newIORef False
+  GLFW.setWindowCloseCallback $ writeIORef closeRef True >> return True
+
+  GLFW.resetTime
+  flip fix 0 $ \loop t → do
+    n ← GLFW.getTime
     state ← readIORef stateRef
-    runReaderT (onDisplay state name) context
+    if n > t
+      then do
+        s ← runReaderT (guiTick name state) context
+        writeIORef stateRef s
+        loop $ t + tickDuration
+      else do
+        runReaderT (drawEverything state name) context
+        GLFW.swapBuffers
+        GLFW.pollEvents
+        b ← GLFW.keyIsPressed exit_key
+        c ← readIORef closeRef
+        unless (b || c) $ loop t
 
-    --new ← getMonotonicMilliSecs
-    --old ← readIORef lastDisplayTime
-    --print $ round $ (1000 :: Double) / fromIntegral (new - old) -- ++ " - " ++ replicate (fromIntegral $ new - old) 'x'
-    --writeIORef lastDisplayTime new
-  GLUT.keyboardMouseCallback $= Just (\x y _ _ → do
-    s <- readIORef stateRef
-
-    case onInput guiConfig x y s of
-      Nothing -> GLUT.leaveMainLoop
-      Just newState -> do
-        writeIORef stateRef newState
-        when (paused s /= paused newState) $ do
-          let
-            (cursor, mc) = if paused newState then (GLUT.Inherit, Nothing) else (GLUT.None, Just $ \qq → do
-              state <- readIORef stateRef
-              newCam <- onMotion camConf (camera state) cursorPos qq
-              writeIORef stateRef $ state{camera=newCam})
-          GLUT.cursor $= cursor
-          GLUT.motionCallback $= mc
-          GLUT.passiveMotionCallback $= mc)
-
-  (getMonotonicMilliSecs >>=) $ fix $ \self next → do
-    state <- readIORef stateRef
-    newState ← runReaderT (guiTick name state) context
-    writeIORef stateRef newState
-    tn ← getMonotonicMilliSecs
-    let next' = next + tickDuration
-    if tn >= next
-      then self next'
-      else GLUT.addTimerCallback (fromInteger $ next - tn) (self next')
-
-  GLUT.actionOnWindowClose $= GLUT.MainLoopReturns
-  GLUT.mainLoop
   readIORef stateRef
 
 
@@ -346,7 +329,7 @@ drawObstacles :: Gui ()
 drawObstacles = do
   Static{scheme=Scheme{..}, ..} ← ask
   lift $ do
-  
+
   GL.materialDiffuse Front $= Color4 1 1 1 1
   GL.materialAmbient Front $= Color4 0.4 0.6 0.8 1
   GL.clientState GL.VertexArray $= Enabled
@@ -371,15 +354,13 @@ drawObstacles = do
 
 drawPlayers :: Map String Player → Gui ()
 drawPlayers players = do
-  Scheme{..} ← asks scheme
-  GuiConfig{..} ← asks guiConfig
+  Static{scheme=Scheme{..}, guiConfig=GuiConfig{..}, bodyQuadric} ← ask
   lift $ do
   GL.materialAmbient Front $= ball_material_ambient
   GL.materialDiffuse Front $= ball_material_diffuse
   forM players $ \Player{..} → GL.preservingMatrix $ do
-    --print (rayOrigin body)
     GL.translate $ rayOrigin body
-    GLUT.renderObject Solid $ GLUT.Sphere' playerSize 20 20
+    GLU.gluSphere bodyQuadric playerSize 20 20
   return ()
 
 drawFutures :: Players → IO ()
@@ -387,11 +368,11 @@ drawFutures players = do
   GL.color green
   forM_ (Map.elems players) $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
--- Entry point:
-
-gui :: SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun → GunConfig) → CameraOrientation →
+gui :: SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun → GunConfig) → GLdouble →
   Controller → IO Controller
-gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientation initialController = do
+gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
+
+  let initialOrientation = CameraOrientation (zoom camConf 0) 0 initialCamYrot
 
   deepseq tree $ do
 
@@ -406,10 +387,15 @@ gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientati
       , camera = initialOrientation
       , guns = initialGuns }
 
-  GLUT.getArgsAndInitialize
+  GLFW.initialize -- todo: check return value
 
-  GLUT.initialDisplayMode $= [GLUT.DoubleBuffered, GLUT.WithDepthBuffer, GLUT.RGBMode]
-  GLUT.createWindow windowTitle
+  GLFW.openWindow GLFW.defaultDisplayOptions -- todo: check return value
+    { GLFW.displayOptions_numRedBits = 8
+    , GLFW.displayOptions_numGreenBits = 8
+    , GLFW.displayOptions_numBlueBits = 8
+    , GLFW.displayOptions_numDepthBits = 1
+    }
+
   GL.depthFunc $= Just GL.Lequal
   GL.clearColor $= fog_color
   GL.lineWidth $= 3 -- Todo: Make configurable.
@@ -449,7 +435,13 @@ gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialOrientati
   GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
   GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GL.StaticDraw)
 
-  controller . runReaderT (glutLoop initialState name) Static{..}
+  bodyQuadric ← GLU.gluNewQuadric
+
+  r ← controller . runReaderT (glfwLoop initialState name) Static{..}
+  GLFW.closeWindow
+  GLFW.terminate
+  return r
+
 
 f :: Static -> CameraOrientation -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
   -- todo: rename
@@ -479,8 +471,6 @@ gunRay c playerPos g = Ray (playerPos <-> cameraOffset c) (gunDirection c g)
 guiTick :: String → State → Gui State
 guiTick myname state@State{..} = do
   static@Static{..} <- ask
-
-  lift $ GLUT.postRedisplay Nothing
 
   if paused then return state else do
 

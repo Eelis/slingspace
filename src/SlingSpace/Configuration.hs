@@ -1,15 +1,17 @@
+{-# LANGUAGE UnicodeSyntax, LambdaCase #-}
+
 module SlingSpace.Configuration
   ( GameplayConfig(..)
-  , Gun(..), GunConfig(..), GunGuiConfig(..), GuiConfig(..), Scheme(..), CameraConfig(..), CameraOrientation(..)
+  , Gun(..), GunConfig(..), GunGuiConfig(..), GuiConfig(..), Scheme(..), CameraConfig(..)
   , Vector3(..), (<*>), (<+>), Color4(..)
   , def, defaultObstacleColor
   ) where
 
 import Graphics.Rendering.OpenGL.GL
-import Logic
-import Gui
-import Math
-import Graphics.UI.GLUT (MouseButton(..), KeyState(..), Key(..))
+import Logic (GunConfig(..), GameplayConfig(..), Gun(..))
+import Gui (GuiConfig(..), GunGuiConfig(..), CameraConfig(..), FloorConfig(..), GridType(..), Scheme(..))
+import Math ((<*>), (<+>))
+import qualified Graphics.UI.GLFW as GLFW
 
 class Default a where def :: a
 
@@ -31,31 +33,28 @@ instance Default CameraConfig where
   def = CameraConfig
     { viewing_dist = 50000
     , fov = 45
-    , zoomIn = max 40 . (/ 1.1)
-    , zoomOut = min 5000 . (* 1.1)
+    , wheelBounds = (-5,5)
+    , zoom = fromIntegral . (120 +) . (* 20) . (^ (2::Int)) . (5 -)
     , mouse_speed = 573
-    , invert_mouse = False }
+    , invert_mouse = True }
 
 instance Default GuiConfig where
   def = GuiConfig
     { windowTitle = "SlingSpace"
-    , gunGuiConfig = GunGuiConfig (-0.12) . (\g -> case g of LeftGun -> -0.19; RightGun -> 0.19)
+    , gunGuiConfig = GunGuiConfig (-0.12) . (\case LeftGun → -0.19; RightGun → 0.19)
     , ugly = False
     , floorConf = Just (Grid { grid_size = 200, grid_type = LinedGrid {grid_line_width=3} })
     , playerSize = 35
     , camConf = def
     , schemeFile = "cool.hs"
-    , restart_key = (Char ' ', Down)
-    , pause_key = (Char 'p', Down)
-    , exit_key = (Char 'q', Down)
-    , zoom_in_key = (MouseButton WheelUp, Down)
-    , zoom_out_key = (MouseButton WheelDown, Down)
-    , tickDuration = 10 }
-
-instance Default CameraOrientation where
-  def = CameraOrientation 600 0 pi
+    , restart_key = GLFW.CharKey ' '
+    , pause_key = GLFW.CharKey 'P'
+    , exit_key = GLFW.CharKey 'Q'
+    , gunForButton = \case
+        GLFW.MouseButton0 → Just LeftGun
+        GLFW.MouseButton1 → Just RightGun
+        _ → Nothing
+    , tickDuration = 0.01 }
 
 defaultObstacleColor :: Color3 GLdouble
 defaultObstacleColor = Color3 0.9 0.9 0.9
-
-

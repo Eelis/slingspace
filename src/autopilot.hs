@@ -40,5 +40,5 @@ main = do
 
   playback
     (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
-    tree guiConfig SlingSpace.Configuration.def
+    tree guiConfig pi
     (evalRand life (mkStdGen 3))
