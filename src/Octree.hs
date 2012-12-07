@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns, FlexibleInstances #-}
+{-# LANGUAGE UnicodeSyntax, RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns, FlexibleInstances #-}
 
 module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
@@ -12,14 +12,14 @@ import qualified Data.Vector as Vector
 
 type Subs c a = Vector (c, Maybe (Box c a))
 
-class Splittable t where split :: t -> [t]
+class Splittable t where split :: t → [t]
 
 instance Splittable Cube where
-  split Cube{..} = [Cube (cubeCorner <+> (i <*> subOff)) subSize | i <- subIds]
+  split Cube{..} = [Cube (cubeCorner <+> (i <*> subOff)) subSize | i ← subIds]
     where
       subOff = cubeSize / 3
       subSize = subOff * 2
-      subIds = 
+      subIds =
         [ Vector3 0 0 0
         , Vector3 0 0 1
         , Vector3 0 1 0
@@ -29,13 +29,13 @@ instance Splittable Cube where
         , Vector3 1 1 0
         , Vector3 1 1 1 ]
 
-mapFirst :: [a] -> (a -> Maybe a) -> Maybe [a]
+mapFirst :: [a] → (a → Maybe a) → Maybe [a]
 mapFirst [] _ = Nothing
 mapFirst (h : t) f
-  | Just h' <- f h = Just $ h' : t
+  | Just h' ← f h = Just $ h' : t
   | otherwise = (h:) `fmap` mapFirst t f
 
-mapFirstV :: Vector a -> (a -> Maybe a) -> Maybe (Vector a)
+mapFirstV :: Vector a → (a → Maybe a) → Maybe (Vector a)
 mapFirstV v f = Vector.fromList `fmap` mapFirst (Vector.toList v) f
   -- horribly inefficient, but only used in tree construction
 
@@ -43,54 +43,54 @@ data Box c a = Box
   { objects :: ![a] -- which don't fit into smaller boxes
   , subBoxes :: !(Subs c a) }
 
-instance (NFData c, NFData a) => NFData (Box c a)
+instance (NFData c, NFData a) ⇒ NFData (Box c a)
 
-showBox :: Show a => Box c a -> [String]
+showBox :: Show a ⇒ Box c a → [String]
 showBox Box{..} =
   ("[" ++ replicate (length objects) '+' {-show objects-} ++ "]") : map ("  " ++)
     (concatMap (maybe [] showBox . snd) (Vector.toList subBoxes))
 
-instance Show a => Show (Box c a) where
+instance Show a ⇒ Show (Box c a) where
   show = unlines . showBox
 
 type CubeBox c a = (c, Box c a)
 
-boxToList :: Box c a -> [a]
+boxToList :: Box c a → [a]
 boxToList Box{..} = objects ++ concatMap (maybe [] boxToList . snd) (Vector.toList subBoxes)
 
-toList :: CubeBox c a -> [a]
+toList :: CubeBox c a → [a]
 toList = boxToList . snd
 
-emptyBox :: Splittable t => t -> Box t a
-emptyBox c = Box [] $ Vector.fromList [(c', Nothing) | c' <- split c]
+emptyBox :: Splittable t ⇒ t → Box t a
+emptyBox c = Box [] $ Vector.fromList [(c', Nothing) | c' ← split c]
 
-empty :: Splittable t => t -> CubeBox t a
+empty :: Splittable t ⇒ t → CubeBox t a
 empty !c = (c, emptyBox c)
 
-doInsert :: (Splittable c, FitsIn a c) => a -> c -> Maybe (Box c a) -> Maybe (Box c a)
+doInsert :: (Splittable c, FitsIn a c) ⇒ a → c → Maybe (Box c a) → Maybe (Box c a)
 doInsert obj cube mb
   | not (obj `fitsIn` cube) = Nothing
   | otherwise = Just $ case mapFirstV subBoxes f of
-        Nothing -> Box (obj : objects) subBoxes
-        Just subBoxes' -> Box objects subBoxes'
+        Nothing → Box (obj : objects) subBoxes
+        Just subBoxes' → Box objects subBoxes'
   where
     Box{objects,subBoxes} = mb `orElse` emptyBox cube
     f (c', msb) = case doInsert obj c' msb of
-      Nothing -> Nothing
-      Just x -> Just (c', Just x)
+      Nothing → Nothing
+      Just x → Just (c', Just x)
 
-insert :: (Splittable c, Show c, Show a, FitsIn a c) => CubeBox c a -> a -> CubeBox c a
+insert :: (Splittable c, Show c, Show a, FitsIn a c) ⇒ CubeBox c a → a → CubeBox c a
 insert (c, b) o
-  | Just b' <- doInsert o c (Just b) = (c, b')
+  | Just b' ← doInsert o c (Just b) = (c, b')
   | otherwise = error $ "object " ++ show o ++ " did not fit in cube " ++ show c
 
-fromList :: (Show a, FitsIn a Cube) => Cube -> [a] -> CubeBox Cube a
+fromList :: (Show a, FitsIn a Cube) ⇒ Cube → [a] → CubeBox Cube a
 fromList c = foldl insert (empty c)
 
-subs :: CubeBox c a -> [CubeBox c a]
-subs (_, Box{subBoxes}) = [ (c, b) | (c, Just b) <- Vector.toList subBoxes ]
+subs :: CubeBox c a → [CubeBox c a]
+subs (_, Box{subBoxes}) = [ (c, b) | (c, Just b) ← Vector.toList subBoxes ]
 
-query :: Collision q c x => q -> CubeBox c a -> [a]
+query :: Collision q c x ⇒ q → CubeBox c a → [a]
 query !q = go
   where
     go!(c, Box{..})
@@ -99,4 +99,3 @@ query !q = go
       where
         f a (_, Nothing) = a
         f a (c', Just b') = a ++ go (c', b')
-

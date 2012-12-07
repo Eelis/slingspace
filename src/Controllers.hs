@@ -25,7 +25,7 @@ instance Controller (Any Controller) where -- ghc /should/ be able to generate t
   tick (Any c) = Any (tick c)
   fire g v (Any c) = Any `fmap` fire g v c
 
-players :: Controller c => c → [Life]
+players :: Controller c ⇒ c → [Life]
 players c = maybeToList (player c) ++ others c
 
 instance Controller Life where
@@ -33,7 +33,7 @@ instance Controller Life where
   tick = future
 
 
-class Controller c => BasicController c where
+class Controller c ⇒ BasicController c where
   controllerObstacles :: c → ObstacleTree
   controllerGpCfg :: c → GameplayConfig
     -- assumed to remain constant

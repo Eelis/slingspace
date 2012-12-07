@@ -29,18 +29,18 @@ betterThan target a b
 data Stalker c = Stalker { stalker :: Life, prng :: StdGen, stalked :: c }
   -- Nice example of a controller modifier that needs some extra state in addition to just more lives.
 
-instance BasicController c => BasicController (Stalker c) where
+instance BasicController c ⇒ BasicController (Stalker c) where
   controllerObstacles = controllerObstacles . stalked
   controllerGpCfg = controllerGpCfg . stalked
 
-stalk :: BasicController c => Stalker c → c → Stalker c
+stalk :: BasicController c ⇒ Stalker c → c → Stalker c
 stalk Stalker{..} stalked' = Stalker stalker' prng' stalked'
   where
     (stalker', prng') = case player stalked' of
       Just l → runRand (reviseIfWise (tryRandomAction (betterThan (positions l)) (controllerObstacles stalked) (controllerGpCfg stalked)) stalker) prng
       Nothing → (stalker, prng)
 
-instance BasicController c => Controller (Stalker c) where
+instance BasicController c ⇒ Controller (Stalker c) where
   player = player . stalked
   others Stalker{..} = stalker : others stalked
   tick c = stalk (c{stalker = future (stalker c)}) (tick (stalked c))

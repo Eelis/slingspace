@@ -40,7 +40,7 @@ main = do
   gpCfg@GameplayConfig{gunConfig} ← getDataFileName "config/gameplay.hs" >>= loadConfig
   guiConfig ← getDataFileName "config/gui.hs" >>= loadConfig 
 
-  obstacles :: [GeometricObstacle] ← take 2000 . ((\(_, _, x) -> x) .) . evalRandIO (infinite_tunnel tuCfg)
+  obstacles :: [GeometricObstacle] ← take 2000 . ((\(_, _, x) → x) .) . evalRandIO (infinite_tunnel tuCfg)
 
   let
     tree = Octree.fromList bigCube obstacles

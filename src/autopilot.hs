@@ -14,14 +14,14 @@ import System.Random (mkStdGen)
 import qualified SlingSpace.Configuration
 import qualified Octree
 
-betterThan :: Life -> Life -> Bool
+betterThan :: Life → Life → Bool
 a `betterThan` b
     | abs (al - bl) > 200 = al > bl
     | otherwise = value a > value b
     where
       al = lifeExpectancyUpto lookahead a
       bl = lifeExpectancyUpto lookahead b
-      value = average . map ((\(Vector3 _ y z) -> y+z) . rayOrigin . body) . genericTake lookahead . moments
+      value = average . map ((\(Vector3 _ y z) → y+z) . rayOrigin . body) . genericTake lookahead . moments
       lookahead = 400
 
 main :: IO ()
@@ -32,7 +32,7 @@ main = do
   guiConfig ← getDataFileName "config/gui.hs" >>= loadConfig
 
   let
-    obstacles :: [GeometricObstacle] = take 1000 $ ((\(_, _, x) -> x) .) $ evalRand (infinite_tunnel tuCfg) (mkStdGen 4)
+    obstacles :: [GeometricObstacle] = take 1000 $ ((\(_, _, x) → x) .) $ evalRand (infinite_tunnel tuCfg) (mkStdGen 4)
     tree = Octree.fromList bigCube obstacles
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty

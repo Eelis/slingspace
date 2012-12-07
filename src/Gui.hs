@@ -40,7 +40,7 @@ data Scheme = Scheme
   , rope_line_width :: GLfloat
   , fog_density :: GLfloat
   , fog_color :: Color4 GLclampf
-  , gunColor :: Gun -> Color4 GLclampf
+  , gunColor :: Gun → Color4 GLclampf
   , lightModel_ambient
   , ballLight_ambient, ballLight_diffuse
   , ball_material_ambient, ball_material_diffuse :: Color4 GLfloat
@@ -66,7 +66,7 @@ data GunGuiConfig = GunGuiConfig { gun_xrot, gun_yrot :: GLdouble {- in radians 
 
 data GuiConfig = GuiConfig
   { windowTitle :: String
-  , gunGuiConfig :: Gun -> GunGuiConfig
+  , gunGuiConfig :: Gun → GunGuiConfig
   , ugly :: Bool
   , floorConf :: Maybe FloorConfig
   , playerSize :: GLdouble
@@ -82,7 +82,7 @@ data Static = Static
   , bodyQuadric :: Ptr GLU.GLUquadric
   , scheme :: Scheme
   , guiConfig :: GuiConfig
-  , gunConfig :: Gun -> GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
+  , gunConfig :: Gun → GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
   , obstacleCount :: Int
   , tree :: ObstacleTree }
 
@@ -112,7 +112,7 @@ green = Color4 0 1 0 1
 initialGuns :: Guns
 initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
 
-drawEverything :: Controller c => State c → Gui ()
+drawEverything :: Controller c ⇒ State c → Gui ()
 drawEverything State{camera=CameraOrientation{..}, ..} = do
   lift $ do
     GL.clear [ColorBuffer, DepthBuffer]
@@ -174,7 +174,7 @@ keyCallback guiConfig@GuiConfig{camConf=CameraConfig{..}} stateRef k b = when b 
           writeIORef r (x', y')
           modifyIORef' stateRef $ \st → st{camera=updateOrientation (x' - x) (y' - y) (camera st)}
 
-glfwLoop :: Controller c => State c → Gui (State c)
+glfwLoop :: Controller c ⇒ State c → Gui (State c)
 glfwLoop initialState = do
   context@Static
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
@@ -257,18 +257,18 @@ drawFloor {-visible_obs-} Player{..} = do
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               vertex $ tov $ Vector3 x' 0 z'
 
-drawTree :: ObstacleTree -> Gui ()
+drawTree :: ObstacleTree → Gui ()
 drawTree = lift . renderPrimitive Lines . go Nothing
   where
-    go :: Maybe V -> ObstacleTree -> IO ()
+    go :: Maybe V → ObstacleTree → IO ()
     go mp t = do
       let
         s = cubeSize (fst t) / 2 :: GLdouble
         center = cubeCorner (fst t) <+> Vector3 s s s
       forM_ (Octree.subs t) (go (Just center))
       case mp of
-        Nothing -> return ()
-        Just p -> mapM_ (vertex . tov) [center, p]
+        Nothing → return ()
+        Just p → mapM_ (vertex . tov) [center, p]
 
 drawCrossHairs :: Guns → Gui ()
 drawCrossHairs guns = do
@@ -359,7 +359,7 @@ drawFutures ls = do
   GL.color green
   forM_ ls $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
-gui :: Controller c => SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
+gui :: Controller c ⇒ SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
   c → IO c
 gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
 
@@ -434,20 +434,20 @@ gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initia
   return r
 
 
-f :: Controller c => Static → CameraOrientation → V → Gun → ClientGunState → CMS.State c ClientGunState
+f :: Controller c ⇒ Static → CameraOrientation → V → Gun → ClientGunState → CMS.State c ClientGunState
   -- todo: rename
 f Static{..} o playerPos g ClientGunState{..} = do
-    c <- CMS.get
-    newFireState <- case (newTarget, fireState) of
-      (Just t, FireAsap) | Just c' <- fire g (Just t) c → CMS.put c' >> return Fired
-      (_, ReleaseAsap) | Just c' <- fire g Nothing c → CMS.put c' >> return Idle
-      (_, s) -> return s
+    c ← CMS.get
+    newFireState ← case (newTarget, fireState) of
+      (Just t, FireAsap) | Just c' ← fire g (Just t) c → CMS.put c' >> return Fired
+      (_, ReleaseAsap) | Just c' ← fire g Nothing c → CMS.put c' >> return Idle
+      _ → return fireState
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
     newTarget = findTarget tree playerPos (shootingRange (gunConfig g))
       $ gunRay o playerPos (gunGuiConfig guiConfig g)
 
-gunDirection :: CameraOrientation -> GunGuiConfig -> V
+gunDirection :: CameraOrientation → GunGuiConfig → V
 gunDirection CameraOrientation{..} GunGuiConfig{..} = Vector3 0 0 (-1)
   `x_rot_vector` (gun_xrot + cam_xrot)
   `y_rot_vector` (gun_yrot + cam_yrot)
@@ -459,9 +459,9 @@ cameraOffset CameraOrientation{..} =
 gunRay :: CameraOrientation → V → GunGuiConfig → Ray
 gunRay c playerPos g = Ray (playerPos <-> cameraOffset c) (gunDirection c g)
 
-guiTick :: Controller c => State c → Gui (State c)
+guiTick :: Controller c ⇒ State c → Gui (State c)
 guiTick state@State{..} = do
-  static@Static{..} <- ask
+  static@Static{..} ← ask
 
   if paused then return state else do
 

@@ -57,10 +57,10 @@ Vector3 x y z </> s = Vector3 (x / s) (y / s) (z / s)
 data Matrix33 a = Matrix33 !(Vector3 a) !(Vector3 a) !(Vector3 a) -- three rows
   deriving (Eq, Show, Read)
 
-scalar_matrix_mult :: Num a => a -> Matrix33 a -> Matrix33 a
+scalar_matrix_mult :: Num a ⇒ a → Matrix33 a → Matrix33 a
 scalar_matrix_mult x (Matrix33 a b c) = Matrix33 (a <*> x) (b <*> x) (c <*> x)
 
-inv :: Fractional a => Matrix33 a -> Matrix33 a
+inv :: Fractional a ⇒ Matrix33 a → Matrix33 a
 inv (Matrix33 (Vector3 a b c) (Vector3 d e f) (Vector3 g h k)) =
     scalar_matrix_mult (1 / det) (Matrix33 (Vector3 a' d' g') (Vector3 b' e' h') (Vector3 c' f' k'))
   where
@@ -128,7 +128,7 @@ instance NFData Cube
 plane :: AnnotatedTriangle → Plane
 plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
-class FitsIn o c where fitsIn :: o -> c -> Bool
+class FitsIn o c where fitsIn :: o → c → Bool
 
 instance Vector3 GLdouble `FitsIn` Cube where
   fitsIn !(Vector3 x y z) !(Cube (Vector3 a b c) cubeSize) =
@@ -146,15 +146,15 @@ instance Sphere `FitsIn` Cube where
 instance GeometricObstacle `FitsIn` Cube where
   fitsIn = fitsIn . obstacleSphere
 
-sortPair :: Ord a => (a, a) -> (a, a)
+sortPair :: Ord a ⇒ (a, a) → (a, a)
 sortPair !p@(x, y)
   | x <= y = p
   | otherwise = (y, x)
 
-inRange :: Ord a => a -> Range a -> Bool
+inRange :: Ord a ⇒ a → Range a → Bool
 inRange x !(Range a b) = a <= x && x <= b
 
-st :: (Fractional a, Ord a) => a -> a -> Range a -> Either Bool (a, a)
+st :: (Fractional a, Ord a) ⇒ a → a → Range a → Either Bool (a, a)
 st !p !v !range@Range{..}
   | abs v <= 0.0001 = Left $ inRange p range
   | otherwise = Right $ sortPair ((lo - p) / v, (hi - p) / v)
@@ -165,7 +165,7 @@ class Collision a b c | a b → c where
   collision :: a → b → c
   collide :: a → b → Bool
 
-instance Ord a => Collision (Range a) (Range a) (Maybe (Range a)) where
+instance Ord a ⇒ Collision (Range a) (Range a) (Maybe (Range a)) where
   collide a b = isJust (collision a b)
   collision !(Range lo hi) !(Range lo' hi')
     | lo'' <= hi'' = Just $ Range lo'' hi''
@@ -233,7 +233,7 @@ instance Collision (Ray, GLdouble → V → Bool) AnnotatedTriangle (Maybe (GLdo
     return (eta, coll)
       -- The predicate is integrated because applying it after-the-fact is more expensive, because by that time the three inner_prods have already been evaluated.
 
-matrix_vector_mult :: Num a => Matrix33 a -> Vector3 a -> Vector3 a
+matrix_vector_mult :: Num a ⇒ Matrix33 a → Vector3 a → Vector3 a
 matrix_vector_mult !(Matrix33 a b c) d = Vector3 (inner_prod a d) (inner_prod b d) (inner_prod c d)
 
 instance Collision (Ray, GLdouble → V → Bool) [AnnotatedTriangle] (Maybe (GLdouble, V, AnnotatedTriangle)) where
@@ -263,7 +263,7 @@ storeVertex = Store.run $ liftA3 StoredVertex
 asStoredVertices :: [VisualObstacle] → SV.Vector StoredVertex
 asStoredVertices obstacles = SV.pack $
   [ StoredVertex vertex triangleNormal obstacleColor
-  | VisualObstacle{..} <- obstacles
+  | VisualObstacle{..} ← obstacles
   , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle
   , vertex ← tupleToList triangleVertices ]
 
@@ -290,7 +290,7 @@ data GeometricObstacle = GeometricObstacle
   , obstacleTriangles :: ![AnnotatedTriangle]
   } deriving (Show, Read)
 
-bytesPerVertex, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle, trianglesPerObstacle, verticesPerTriangle :: Num a => a
+bytesPerVertex, bytesPerDouble, bytesPerVector, bytesPerObstacle, bytesPerTriangle, verticesPerObstacle, trianglesPerObstacle, verticesPerTriangle :: Num a ⇒ a
 trianglesPerObstacle = 4
 verticesPerTriangle = 3
 verticesPerObstacle = trianglesPerObstacle * verticesPerTriangle

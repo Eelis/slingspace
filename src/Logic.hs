@@ -60,8 +60,8 @@ progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
 tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
 tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
     case collisionPos of
-      Just cp -> Left cp
-      Nothing -> Right $ Player{ body = newBody, guns = tickGun . guns }
+      Just cp → Left cp
+      Nothing → Right $ Player{ body = newBody, guns = tickGun . guns }
   where
     Vector3 _ oldy _ = rayOrigin
     tickGun r@(Rope _ 0) = r
@@ -71,7 +71,7 @@ tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
         (applyForce cfg (Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect (gunConfig g) (pp <-> rayOrigin); _ → m) rayDirection guns))
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
-      | otherwise = (\(_, x, _) -> x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
+      | otherwise = (\(_, x, _) → x) . collision (body, \(de::GLdouble) (_::V) → de > 0.1 && de < 1.1) (filteredObstacles >>= obstacleTriangles)
     filteredObstacles = Octree.query body tree
       -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate) 
 
@@ -80,7 +80,7 @@ move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
 
 findTarget :: ObstacleTree → V → GLdouble → Ray → Maybe V
 findTarget tree playerPos shooting_range gunRay@(Ray gunOrigin gunDirection) =
-  (\(_, x, _) -> x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
+  (\(_, x, _) → x) . collision (gunRay, \(_::GLdouble) (v::V) → dist_sqrd playerPos v < square shooting_range)
     (filteredObstacles >>= obstacleTriangles)
   where
     filteredObstacles = Octree.query longGunRay tree
@@ -88,25 +88,25 @@ findTarget tree playerPos shooting_range gunRay@(Ray gunOrigin gunDirection) =
 
 data Life = Life Player Life | Death V
 
-moments :: Life -> [Player]
+moments :: Life → [Player]
 moments (Death _) = []
 moments (Life p l) = p : moments l
 
-lifeExpectancyUpto :: Integer -> Life -> Integer
+lifeExpectancyUpto :: Integer → Life → Integer
 lifeExpectancyUpto m = go 0
   where
     go n l
-      | Life _ l' <- l, n /= m = go (n+1) l'
+      | Life _ l' ← l, n /= m = go (n+1) l'
       | otherwise = n
 
-lifeAfter :: ObstacleTree → GameplayConfig -> Player -> Life
+lifeAfter :: ObstacleTree → GameplayConfig → Player → Life
 lifeAfter tree cfg = go
-  where go p = either Death (\q -> Life q (go q)) $ tickPlayer tree cfg p
+  where go p = either Death (\q → Life q (go q)) $ tickPlayer tree cfg p
 
-live :: ObstacleTree → GameplayConfig -> Player -> Life
+live :: ObstacleTree → GameplayConfig → Player → Life
 live tree cfg p = Life p (lifeAfter tree cfg p)
 
-birth :: Life -> Maybe Player -- Nothing if stillborn
+birth :: Life → Maybe Player -- Nothing if stillborn
 birth = listToMaybe . moments
 
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
@@ -122,44 +122,44 @@ safeFuture t c (Death v) = live t c $ Player (Ray v (Vector3 0 0 0)) Map.empty
 safeFuture t c (Life p (Death v)) = live t c $ Player (Ray v (Vector3 0 0 0)) (guns p)
 safeFuture _ _ (Life _ l) = l
 
-orAlternativeLife :: Life -> Life -> Life
+orAlternativeLife :: Life → Life → Life
 orAlternativeLife (Death _) l = l -- oops, died
 orAlternativeLife l _ = l
 
-reviseIfWise :: Functor m => (Life -> m Life) → Life → m Life
+reviseIfWise :: Functor m ⇒ (Life → m Life) → Life → m Life
 reviseIfWise f x = fmap (`orAlternativeLife` x) (f x)
 
-mapFuture :: (Monad m, Functor m) => (Life -> m Life) -> Life -> m Life
-mapFuture _ d@(Death _) = return d
+mapFuture :: (Monad m, Functor m) ⇒ (Life → m Life) → Life → m Life
 mapFuture f (Life a b) = Life a `fmap` f b
+mapFuture _ d = return d
 
-keepTrying :: (Monad m, Functor m) => (Life -> m Life) -> Life -> m Life
+keepTrying :: (Monad m, Functor m) ⇒ (Life → m Life) → Life → m Life
 keepTrying f l = reviseIfWise f l >>= mapFuture (keepTrying f)
 
-positions :: Life -> [V]
+positions :: Life → [V]
 positions = map (rayOrigin . body) . moments
 
-randomAction :: (Functor m, MonadRandom m) => ObstacleTree → GunConfig → Player → m Player
+randomAction :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GunConfig → Player → m Player
 randomAction tree cfg now = do
-  i :: Int <- getRandomR (0, 10)
+  i :: Int ← getRandomR (0, 10)
   if i == 0
     then return $ fire cfg LeftGun Nothing now
     else do
-      c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
+      c ← randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
       return $ fire cfg LeftGun (Just c) now
   where
     s = shootingRange cfg
     here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
     nearby = Octree.query here tree
 
-randomLife :: (Functor m, MonadRandom m) => ObstacleTree → GameplayConfig → Player → m Life
+randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
 randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfig gpCfg LeftGun)
 
-tryRandomAction :: (MonadRandom m, Functor m) => (Life -> Life -> Bool) -> ObstacleTree -> GameplayConfig -> Life -> m Life
+tryRandomAction :: (Functor m, MonadRandom m) ⇒
+  (Life → Life → Bool) → ObstacleTree → GameplayConfig → Life → m Life
 tryRandomAction _ _ _ d@(Death _) = return d -- hunter-to-be already dead
 tryRandomAction cmp tree gpCfg current@(Life now _) = do
-  alternative <- randomLife tree gpCfg now
+  alternative ← randomLife tree gpCfg now
   return $ if future alternative `cmp` future current
     then alternative
     else Death (rayOrigin $ body $ now)
-

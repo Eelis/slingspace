@@ -52,7 +52,6 @@ doing s a = do
   putStrLn "done"
   return x
 
-
 splitOnce :: String → Char → (String, String)
 splitOnce "" _ = ("", "")
 splitOnce (sh:st) c | sh == c = ("", st)
@@ -74,15 +73,15 @@ instance TupleToList (a, a, a) a where tupleToList (x, y, z) = [x, y, z]
 whenJust :: Monad m ⇒ Maybe a → (a → m ()) → m ()
 whenJust = flip (maybe (return ()))
 
-orElse :: Maybe a -> a -> a
+orElse :: Maybe a → a → a
 orElse Nothing d = d
 orElse (Just x) _ = x
 
-randomItem :: (Functor m, MonadRandom m) => [a] → m a
+randomItem :: (Functor m, MonadRandom m) ⇒ [a] → m a
 randomItem xs = fmap (xs !!) $ getRandomR (0, length xs - 1)
 
-average :: Fractional b => [b] -> b
+average :: Fractional b ⇒ [b] → b
 average l = sum l / fromInteger (genericLength l)
 
-data Any u = forall c . u c => Any c
+data Any u = ∀ c . u c ⇒ Any c
   -- todo: there's probably some module which has this

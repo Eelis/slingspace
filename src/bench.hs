@@ -11,7 +11,7 @@ import System.Random (mkStdGen)
 import qualified Octree
 import Control.DeepSeq (deepseq)
 
-tunnel :: forall m . (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
+tunnel :: ∀ m . (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
 tunnel = take 1000 `fmap` tu (Vector3 0 0 0)
   where
     width = 1500
@@ -28,18 +28,16 @@ main = do
   let
     tick :: Player → Player
     tick p = case tickPlayer tree gpCfg p of
-      Left collisionPos -> p{body=Ray collisionPos (Vector3 0 0 0)}
-      Right p' -> p'
+      Left collisionPos → p{body=Ray collisionPos (Vector3 0 0 0)}
+      Right p' → p'
     tree = Octree.fromList bigCube obstacles
     obstacles = evalRand tunnel (mkStdGen 4)
-    initialPositions = [Vector3 x 50000 0 | x <- [-10..10]]
-    initialPlayers = [Player (Ray p (Vector3 0 0 0)) Map.empty | p <- initialPositions]
-
-  --putStrLn $ unlines $ map (show . (\(Vector3 _ y _) -> y) . rayOrigin . body) $ take 6000 $ iterate (tickPlayer tree gp_cfg) initialPlayer
+    initialPositions = [Vector3 x 50000 0 | x ← [-10..10]]
+    initialPlayers = [Player (Ray p (Vector3 0 0 0)) Map.empty | p ← initialPositions]
 
   deepseq tree $ do
 
   t ← getMonotonicMilliSecs
-  print $ [ body (iterate tick p !! 6000) | p <- initialPlayers]
+  print $ [ body (iterate tick p !! 6000) | p ← initialPlayers]
   t' ← getMonotonicMilliSecs
   print $ t' - t
