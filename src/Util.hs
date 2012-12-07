@@ -77,8 +77,9 @@ orElse :: Maybe a → a → a
 orElse Nothing d = d
 orElse (Just x) _ = x
 
-randomItem :: (Functor m, MonadRandom m) ⇒ [a] → m a
-randomItem xs = fmap (xs !!) $ getRandomR (0, length xs - 1)
+randomItem :: (Functor m, MonadRandom m) ⇒ [a] → m (Maybe a)
+randomItem [] = return Nothing
+randomItem xs = Just . (xs !!) . getRandomR (0, length xs - 1)
 
 average :: Fractional b ⇒ [b] → b
 average l = sum l / fromInteger (genericLength l)

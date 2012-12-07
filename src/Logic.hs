@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, TemplateHaskell, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, LambdaCase #-}
 
 module Logic
   ( Gun(..), Rope(..)
@@ -138,13 +138,13 @@ randomAction tree cfg now = do
   i :: Int ← getRandomR (0, 10)
   if i == 0
     then return $ fire cfg LeftGun Nothing now
-    else do
-      c ← triangleCenter . randomItem nearby
-      return $ fire cfg LeftGun (Just (collisionPoint (rayThrough (rayOrigin $ body now) c) nearby `orElse` c)) now
+    else randomItem nearby >>= \case
+      Nothing → return now
+      Just (triangleCenter → c) → return $ fire cfg LeftGun (Just (collisionPoint (rayThrough p c) nearby `orElse` c)) now
   where
+    p = rayOrigin (body now)
     s = shootingRange cfg
-    here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)
-    nearby = Octree.query here tree >>= obstacleTriangles
+    nearby = Octree.query (Cube (p <-> Vector3 s s s) (s*2)) tree >>= obstacleTriangles
 
 
 randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
