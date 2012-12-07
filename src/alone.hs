@@ -19,7 +19,7 @@ import qualified SlingSpace.Configuration
 
 trainingWheels, sideKick :: Bool
 trainingWheels = False
-sideKick = True
+sideKick = False
 
 data C = C { life :: Life, obstacles :: ObstacleTree, gpCfg :: GameplayConfig }
 
