@@ -1,27 +1,39 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns, ViewPatterns #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns #-}
 
 import Gui (gui)
 import qualified Gui
-import Logic (Player(..), release, fire, Life(..), lifeExpectancyUpto, immortalize, live, gunConfig, GameplayConfig(..))
+import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth)
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices)
-import Util ((.), read_config_file, loadConfig, getDataFileName)
+import Util ((.), read_config_file, loadConfig, getDataFileName, Any(Any))
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
-import Obstacles (infinite_tunnel, bigCube)
+import Obstacles (infinite_tunnel, bigCube, ObstacleTree)
 import Prelude hiding ((.))
 import Control.Monad.Random (evalRandIO)
-import Data.Function (on)
+import Guided (Guided(..))
+import Controllers (Controller, BasicController(..))
+import Stalker (Stalker(Stalker))
+import qualified Recorder
+import System.Random (mkStdGen)
 import qualified Octree
 import qualified SlingSpace.Configuration
 
-name :: String
-name = "Player"
-
-betterThan :: Life → Life → Bool
-betterThan = (>=) `on` lifeExpectancyUpto 300
-
-trainingWheels :: Bool
+trainingWheels, sideKick :: Bool
 trainingWheels = False
+sideKick = True
+
+data C = C { life :: Life, obstacles :: ObstacleTree, gpCfg :: GameplayConfig }
+
+instance BasicController C where
+  controllerObstacles = obstacles
+  controllerGpCfg = gpCfg
+
+instance Controller C where
+  player = Just . life
+  tick c@C{..} = c{life=safeFuture (controllerObstacles c) (controllerGpCfg c) life}
+  fire g v c@C{..} = do
+    l ← live (controllerObstacles c) (controllerGpCfg c) . fire (gunConfig gpCfg g) g v . birth life
+    return c{life=l}
 
 main :: IO ()
 main = do
@@ -36,25 +48,12 @@ main = do
     vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
+    stalker = live tree gpCfg (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty)
 
-    makeController :: Life -> Gui.Controller
-    makeController l@(Life p f) = Gui.Controller
-      { players = Map.singleton name l
-      , tick = makeController f
-      , release = \g -> consider (release g p)
-      , fire = \g v -> consider (fire (gunConfig g) g v p) }
-      where
-        consider (live tree gpCfg → l')
-          | not trainingWheels || (l' `betterThan` l) = Just $ makeController $ immortalize tree gpCfg l'
-          | otherwise = Nothing
+  r ← gui vertices tree guiConfig gunConfig pi $
+    Recorder.record $
+    (if trainingWheels then Any . Guided else id) $
+    (if sideKick then Any . Stalker stalker (mkStdGen 3) else id) $
+    (Any C{obstacles=tree, life=live tree gpCfg initialPlayer, ..} :: Any BasicController)
 
-  gui
-    vertices
-    tree
-    name
-    guiConfig
-    gunConfig
-    pi
-    (makeController (immortalize tree gpCfg $ live tree gpCfg initialPlayer))
-
-  return ()
+  putStrLn $ show (length (Recorder.frames r)) ++ " frames."

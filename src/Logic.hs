@@ -3,9 +3,9 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , findTarget, fire, release, tickPlayer, move
+  , findTarget, fire, tickPlayer, move
   , GameplayConfig(..), GunConfig(..)
-  , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, immortalize, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction
+  , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction, safeFuture
   , toFloor
   ) where
 
@@ -45,11 +45,10 @@ fireRope c t pos = Rope (Ray pos dir) eta
    eta = round $ norm_2 off / shootingSpeed c
    dir = off </> fromInteger eta
 
-fire :: GunConfig → Gun → V → Player → Player
-fire c g t p = p { guns = Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
-
-release :: Gun → Player → Player
-release g p = p { guns = Map.delete g $ guns p }
+fire :: GunConfig → Gun → Maybe V → Player → Player
+fire c g mt p = p { guns = case mt of
+  Nothing → Map.delete g $ guns p
+  Just t → Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
 
 rope_effect :: GunConfig → V → V
 rope_effect GunConfig{..} off = off <*> (ropeStrength l / l)
@@ -113,18 +112,15 @@ birth = listToMaybe . moments
 toFloor :: Num a ⇒ Vector3 a → Vector3 a
 toFloor (Vector3 x _ z) = Vector3 x 0 z
 
-future :: Life -> Life
-future l@(Death _) = l
+future :: Life → Life
 future (Life _ l) = l
+future l = l
 
-immortalize :: ObstacleTree → GameplayConfig -> Life -> Life
-immortalize t c u = case u of
-    Life p l → go p l
-    Death _ → error "can't immortalize the dead"
-  where
-    go _ (Life p l) = Life p (go p l)
-    go p (Death v) = Life p' (go p' (lifeAfter t c p'))
-      where p' = Player (Ray v (Vector3 0 0 0)) (guns p)
+safeFuture :: ObstacleTree → GameplayConfig → Life → Life
+  -- i.e. a future that isn't death
+safeFuture t c (Death v) = live t c $ Player (Ray v (Vector3 0 0 0)) Map.empty
+safeFuture t c (Life p (Death v)) = live t c $ Player (Ray v (Vector3 0 0 0)) (guns p)
+safeFuture _ _ (Life _ l) = l
 
 orAlternativeLife :: Life -> Life -> Life
 orAlternativeLife (Death _) l = l -- oops, died
@@ -147,10 +143,10 @@ randomAction :: (Functor m, MonadRandom m) => ObstacleTree → GunConfig → Pla
 randomAction tree cfg now = do
   i :: Int <- getRandomR (0, 10)
   if i == 0
-    then return $ release LeftGun now
+    then return $ fire cfg LeftGun Nothing now
     else do
       c <- randomItem nearby >>= randomItem . map triangleCenter . obstacleTriangles
-      return $ fire cfg LeftGun c now
+      return $ fire cfg LeftGun (Just c) now
   where
     s = shootingRange cfg
     here = Cube (rayOrigin (body now) <-> Vector3 s s s) (s*2)

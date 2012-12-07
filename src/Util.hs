@@ -1,8 +1,8 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, ExistentialQuantification, ConstraintKinds #-}
 
 module Util
   ( (.), getDataFileName, simple_getOpt, minimumByMeasure, read_config_file
-  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average, loadConfig
+  , doing, getMonotonicNanoSecs, getMonotonicMilliSecs, omni_map, htons, getlineSR, bounded, forever, spawn, sendAll, SockReader(..), withResource, withResource', tupleToList, whenJust, orElse, randomItem, average, loadConfig, Any(Any)
   ) where
 
 import Prelude hiding ((.))
@@ -153,3 +153,6 @@ randomItem xs = fmap (xs !!) $ getRandomR (0, length xs - 1)
 
 average :: Fractional b => [b] -> b
 average l = sum l / fromInteger (genericLength l)
+
+data Any u = forall c . u c => Any c
+  -- todo: there's probably some module which has this

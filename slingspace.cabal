@@ -22,7 +22,7 @@ category: games
 
 library
   exposed-modules: SlingSpace.Configuration
-  other-modules: Math, Logic, Util, Octree, Gui, Obstacles, Paths_slingspace
+  other-modules: Math, Logic, Util, Octree, Gui, Obstacles, Paths_slingspace, Controllers
   build-depends: base, vector, deepseq, MonadRandom, clock, network
   hs-source-dirs: src
   extensions: CPP ForeignFunctionInterface
@@ -36,13 +36,6 @@ executable slingspace
 
 executable slingspace-autopilot
   main-is: autopilot.hs
-  hs-source-dirs: src
-  ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
-  extensions: CPP ForeignFunctionInterface
-  build-depends: base, GLURaw, GLFW-b, OpenGL>=2.0, stm, network, template-haskell, random, containers, mtl, clock, MonadRandom, deepseq, storablevector, storable-tuple, storable-record, vector, hint
-
-executable slingspace-sidekick
-  main-is: sidekick.hs
   hs-source-dirs: src
   ghc-options: -O2 -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-do-bind
   extensions: CPP ForeignFunctionInterface

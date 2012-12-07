@@ -1,13 +1,12 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf, FlexibleInstances #-}
 
-module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
+module Gui (Controller(..), Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui, players) where
 
 import Data.Map (Map)
-
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
 import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), Cube(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, mapMaybe)
 import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
@@ -21,6 +20,7 @@ import Data.Traversable (mapM)
 import Control.DeepSeq (deepseq)
 import Obstacles (ObstacleTree)
 import Data.Typeable (Typeable)
+import Controllers (Controller(..), players)
 
 import qualified Octree
 import qualified Logic
@@ -94,21 +94,12 @@ data CameraOrientation = CameraOrientation { cam_dist, cam_xrot, cam_yrot :: !GL
 data FireState = FireAsap | ReleaseAsap | Fired | Idle
 data ClientGunState = ClientGunState { target :: Maybe V, fireState :: FireState }
 type Guns = Map Gun ClientGunState
-type Players = Map String Life
 
-data State = State
-  { controller :: Controller
+data State c = State
+  { controller :: c
   , paused :: Bool
   , camera :: CameraOrientation
   , guns :: Guns }
-
-data Controller = Controller
-  { players :: Players
-  , tick :: Controller
-  , release :: Gun → Maybe Controller
-  , fire :: Gun → V → Maybe Controller }
-  -- release and fire return Maybes so that the controller can say "nope, you can't release/fire now"
-
 
 
 
@@ -121,8 +112,8 @@ green = Color4 0 1 0 1
 initialGuns :: Guns
 initialGuns = Map.fromList $ flip (,) (ClientGunState Nothing Idle) . [LeftGun, RightGun]
 
-drawEverything :: State → String → Gui ()
-drawEverything State{controller=Controller{..}, camera=CameraOrientation{..}, ..} myname = do
+drawEverything :: Controller c => State c → Gui ()
+drawEverything State{camera=CameraOrientation{..}, ..} = do
   lift $ do
     GL.clear [ColorBuffer, DepthBuffer]
     GL.loadIdentity
@@ -132,15 +123,15 @@ drawEverything State{controller=Controller{..}, camera=CameraOrientation{..}, ..
     rotateRadians cam_xrot $ Vector3 1 0 0
     rotateRadians cam_yrot $ Vector3 0 1 0
 
-  whenJust (Map.lookup myname players >>= birth) $ \me → do
+  whenJust (player controller >>= birth) $ \me → do
   lift $ GL.translate $ (rayOrigin $ body me) <*> (-1)
-  drawPlayers (Map.mapMaybe birth players)
+  drawPlayers $ mapMaybe birth $ players controller
   drawObstacles
   lift $ lighting $= Disabled
   --lift $ drawFutures players
   --drawTree tree
   drawFloor {-(shootableObstacles >>= obstacleTriangles)-} me
-  drawRopes (Map.mapMaybe birth players)
+  drawRopes $ mapMaybe birth $ players controller
   --drawOrientation (head . players)
   --drawSectorBorders $ head $ head $ Map.elems players
   drawCrossHairs guns
@@ -154,14 +145,14 @@ onReshape CameraConfig{..} w h = do
   GLU.gluPerspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
   GL.matrixMode $= GL.Modelview 0
 
-onKey :: GuiConfig → GLFW.Key → State → State
+onKey :: GuiConfig → GLFW.Key → State c → State c
 onKey
     GuiConfig{camConf=CameraConfig{..}, ..}
-    k state@State{controller=Controller{..}, ..}
+    k state@State{..}
   | k == pause_key = state{paused=not paused}
   | otherwise = state
 
-keyCallback :: GuiConfig → IORef State → GLFW.KeyCallback
+keyCallback :: GuiConfig → IORef (State c) → GLFW.KeyCallback
 keyCallback guiConfig@GuiConfig{camConf=CameraConfig{..}} stateRef k b = when b $ do
   let
     updateOrientation x y c@CameraOrientation{..} = c{
@@ -183,8 +174,8 @@ keyCallback guiConfig@GuiConfig{camConf=CameraConfig{..}} stateRef k b = when b 
           writeIORef r (x', y')
           modifyIORef' stateRef $ \st → st{camera=updateOrientation (x' - x) (y' - y) (camera st)}
 
-glfwLoop :: State → String → Gui State
-glfwLoop initialState name = do
+glfwLoop :: Controller c => State c → Gui (State c)
+glfwLoop initialState = do
   context@Static
     {guiConfig=guiConfig@GuiConfig{camConf=camConf@CameraConfig{..}, ..}, ..} ← ask
   lift $ do
@@ -213,11 +204,11 @@ glfwLoop initialState name = do
     state ← readIORef stateRef
     if n > t
       then do
-        s ← runReaderT (guiTick name state) context
+        s ← runReaderT (guiTick state) context
         writeIORef stateRef s
         loop $ t + tickDuration
       else do
-        runReaderT (drawEverything state name) context
+        runReaderT (drawEverything state) context
         GLFW.swapBuffers
         GLFW.pollEvents
         b ← GLFW.keyIsPressed exit_key
@@ -299,26 +290,26 @@ drawCrossHairs guns = do
       , Vertex3 (1 :: GLdouble) 0 (-100)
       , Vertex3 (0 :: GLdouble) 1 (-100) ]
 
-drawRopes :: Map String Player → Gui ()
-drawRopes players = do
+drawRopes :: [Player] → Gui ()
+drawRopes ps = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
   GL.lineWidth $= rope_line_width
-  renderPrimitive Lines $ forM players $ \player@Player{..} →
-    forM_ (Map.toList (Logic.guns player)) $ \(gun, Rope{..}) → do
+  renderPrimitive Lines $ forM ps $ \p@Player{..} →
+    forM_ (Map.toList (Logic.guns p)) $ \(gun, Rope{..}) → do
         GL.color $ gunColor gun
         vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
   return ()
 
 drawOrientation :: Map String Player → Gui ()
-drawOrientation players = do
+drawOrientation p = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
   lift $ do
   GL.lineWidth $= rope_line_width
-  renderPrimitive Lines $ forM players $ \Player{..} → do
+  renderPrimitive Lines $ forM p $ \Player{..} → do
     vertex $ tov $ rayOrigin body <+> Vector3 (-100) 0 0
     vertex $ tov $ rayOrigin body <+> Vector3 100 0 0
     vertex $ tov $ rayOrigin body <+> Vector3 0 0 (-100)
@@ -352,25 +343,25 @@ drawObstacles = do
   GL.clientState GL.NormalArray $= Disabled
   GL.clientState GL.ColorArray $= Disabled
 
-drawPlayers :: Map String Player → Gui ()
-drawPlayers players = do
+drawPlayers :: [Player] → Gui ()
+drawPlayers p = do
   Static{scheme=Scheme{..}, guiConfig=GuiConfig{..}, bodyQuadric} ← ask
   lift $ do
   GL.materialAmbient Front $= ball_material_ambient
   GL.materialDiffuse Front $= ball_material_diffuse
-  forM players $ \Player{..} → GL.preservingMatrix $ do
+  forM p $ \Player{..} → GL.preservingMatrix $ do
     GL.translate $ rayOrigin body
     GLU.gluSphere bodyQuadric playerSize 20 20
   return ()
 
-drawFutures :: Players → IO ()
-drawFutures players = do
+drawFutures :: [Life] → IO ()
+drawFutures ls = do
   GL.color green
-  forM_ (Map.elems players) $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
+  forM_ ls $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
-gui :: SV.Vector StoredVertex → ObstacleTree → String → GuiConfig → (Gun → GunConfig) → GLdouble →
-  Controller → IO Controller
-gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
+gui :: Controller c => SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
+  c → IO c
+gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
 
   let initialOrientation = CameraOrientation (zoom camConf 0) 0 initialCamYrot
 
@@ -437,19 +428,19 @@ gui storedObstacles tree name guiConfig@GuiConfig{..} gunConfig initialCamYrot i
 
   bodyQuadric ← GLU.gluNewQuadric
 
-  r ← controller . runReaderT (glfwLoop initialState name) Static{..}
+  r ← controller . runReaderT (glfwLoop initialState) Static{..}
   GLFW.closeWindow
   GLFW.terminate
   return r
 
 
-f :: Static -> CameraOrientation -> V -> Gun -> ClientGunState -> CMS.State Controller ClientGunState
+f :: Controller c => Static → CameraOrientation → V → Gun → ClientGunState → CMS.State c ClientGunState
   -- todo: rename
 f Static{..} o playerPos g ClientGunState{..} = do
     c <- CMS.get
     newFireState <- case (newTarget, fireState) of
-      (Just t, FireAsap) | Just c' <- fire c g t → CMS.put c' >> return Fired
-      (_, ReleaseAsap) | Just c' <- release c g → CMS.put c' >> return Idle
+      (Just t, FireAsap) | Just c' <- fire g (Just t) c → CMS.put c' >> return Fired
+      (_, ReleaseAsap) | Just c' <- fire g Nothing c → CMS.put c' >> return Idle
       (_, s) -> return s
     return ClientGunState{target=newTarget, fireState=newFireState}
   where
@@ -468,17 +459,18 @@ cameraOffset CameraOrientation{..} =
 gunRay :: CameraOrientation → V → GunGuiConfig → Ray
 gunRay c playerPos g = Ray (playerPos <-> cameraOffset c) (gunDirection c g)
 
-guiTick :: String → State → Gui State
-guiTick myname state@State{..} = do
+guiTick :: Controller c => State c → Gui (State c)
+guiTick state@State{..} = do
   static@Static{..} <- ask
 
   if paused then return state else do
 
     -- errs ← get errors
     -- print $ "[" ++ (show errs) ++ "]"
-  
-  case Map.lookup myname (players controller) >>= birth of
+
+  case player controller >>= birth of
     Nothing → return state
     Just Player{body} → do
       let (newGuns, newController) = CMS.runState (Map.traverseWithKey (f static camera (rayOrigin body)) guns) controller
       return state{controller=tick newController, guns=newGuns}
+
