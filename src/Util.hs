@@ -34,7 +34,7 @@ read_config_file :: Read a ⇒ String → IO a
 read_config_file f = liftM read $ readFile =<< getDataFileName ("config/" ++ f)
 
 loadConfig :: Typeable a ⇒ String → IO a
-loadConfig s = runInterpreter i >>= either (error . show) return
+loadConfig s = doing ("Loading " ++ s) $ runInterpreter i >>= either (error . show) return
   where
     i = do
       loadModules [s]
