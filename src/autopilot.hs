@@ -22,13 +22,13 @@ a `betterThan` b
     where
       al = lifeExpectancyUpto lookahead a
       bl = lifeExpectancyUpto lookahead b
-      value = average . map ((\(Vector3 _ y z) → y+z) . rayOrigin . body) . genericTake lookahead . moments
+      value = average . map ((\(Vector3 _ y z) → y * 3 + z) . rayOrigin . body) . genericTake lookahead . moments
       lookahead = 400
 
 rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
 rawObstacles = replicateM 300 $
-  getRandomR (Vector3 (-1500) 0 0, Vector3 1500 3000 100000)
-    >>= randomObs 800
+  getRandomR (Vector3 (-1200) 0 0, Vector3 1200 2000 100000)
+    >>= randomObs 600
 
 benchmark :: Bool
 benchmark = False
