@@ -36,11 +36,11 @@ instance Controller C where
     return c{life=l}
 
 rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
-rawObstacles = replicateM 700 $
+rawObstacles = replicateM 600 $
   liftM2 (<+>)
     ((<*> 30000) . unitCirclePoint . randomAngle)
-    (getRandomR (Vector3 (-1500) 0 (-1500), Vector3 1500 3000 1500))
-      >>= randomObs 800
+    (getRandomR (Vector3 (-1200) 0 (-1200), Vector3 1000 2000 1000))
+      >>= randomObs 600
 
 main :: IO ()
 main = do
