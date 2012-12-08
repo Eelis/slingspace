@@ -3,7 +3,9 @@
 import Gui (gui)
 import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth)
 import qualified Data.Map as Map
-import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices, randomAngle, unitCirclePoint, (<+>), (<*>))
+import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices, randomAngle, unitCirclePoint)
+import Data.AdditiveGroup ((^+^))
+import Data.VectorSpace ((^*))
 import Util ((.), loadConfig, getDataFileName, Any(Any))
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
 import Obstacles (ObstacleTree, grow, randomObs)
@@ -37,8 +39,8 @@ instance Controller C where
 
 rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
 rawObstacles = replicateM 600 $
-  liftM2 (<+>)
-    ((<*> 30000) . unitCirclePoint . randomAngle)
+  liftM2 (^+^)
+    ((^* 30000) . unitCirclePoint . randomAngle)
     (getRandomR (Vector3 (-1200) 0 (-1200), Vector3 1000 2000 1000))
       >>= randomObs 600
 

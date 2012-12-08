@@ -3,7 +3,10 @@
 module Obstacles (randomObs, ObstacleTree, grow) where
 
 import Util ((.))
-import Math (V, (<->), (<+>), (<*>), GeometricObstacle(..), randomVector3, normalize_v, cross_prod, annotateObstacle, annotateTriangle, Cube(..), collide)
+import Math (V,  GeometricObstacle(..), randomVector3, annotateObstacle, annotateTriangle, Cube(..), collide)
+import Data.AdditiveGroup ((^+^), (^-^))
+import Data.VectorSpace ((^*), normalized)
+import Data.Cross (cross3)
 import Control.Arrow (second)
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
 import Prelude hiding ((.))
@@ -33,8 +36,8 @@ aboveSurface (Vector3 x y z) = Vector3 x (max 0 y) z
 
 randomObs :: (Functor m, MonadRandom m) ⇒ GLdouble → V → m GeometricObstacle
 randomObs size center = do
-  let q = aboveSurface . (center <+>) . randomVector3 size
+  let q = aboveSurface . (center ^+^) . randomVector3 size
   a ← q; b ← q; c ← q
-  let w = aboveSurface $ a <-> (normalize_v (cross_prod (b <-> a) (c <-> a)) <*> size)
+  let w = aboveSurface $ a ^-^ (normalized (cross3 (b ^-^ a) (c ^-^ a)) ^* size)
   return $ annotateObstacle [at a b c, at b a w, at a c w, at c b w]
  where at = annotateTriangle

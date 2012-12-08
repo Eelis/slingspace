@@ -12,7 +12,9 @@ module Logic
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
-import Math ((<+>), (<->), (</>), (<*>), norm_2, V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough, inner_prod)
+import Math (V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough)
+import Data.AdditiveGroup ((^+^), (^-^))
+import Data.VectorSpace ((^*), (^/), magnitude, magnitudeSq)
 import Util ((.), randomItem, orElse)
 import Data.Maybe (listToMaybe)
 import Prelude hiding ((.))
@@ -41,9 +43,9 @@ data Player = Player
 fireRope :: GunConfig → V → V → Rope
 fireRope c t pos = Rope (Ray pos dir) eta
   where
-   off = t <-> pos
-   eta = round $ norm_2 off / shootingSpeed c
-   dir = off </> fromInteger eta
+   off = t ^-^ pos
+   eta = round $ magnitude off / shootingSpeed c
+   dir = off ^/ fromInteger eta
 
 fire :: GunConfig → Gun → Maybe V → Player → Player
 fire c g mt p = p { guns = case mt of
@@ -53,14 +55,14 @@ fire c g mt p = p { guns = case mt of
 rope_effect :: GunConfig → V → V
 rope_effect GunConfig{ropeStrength} off =
   if p >= 0.1
-    then off <*> (ropeStrength l / l)
+    then off ^* (ropeStrength l / l)
     else Vector3 0 0 0
   where
-    p = inner_prod off off
+    p = magnitudeSq off
     l = sqrt p
 
 progressRay :: Ray → Ray
-progressRay r@Ray{..} = r { rayOrigin = rayOrigin <+> rayDirection }
+progressRay r@Ray{..} = r { rayOrigin = rayOrigin ^+^ rayDirection }
 
 tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
 tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
@@ -72,18 +74,18 @@ tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
     tickGun r@(Rope _ 0) = r
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
     newBody = Ray
-        (rayOrigin <+> rayDirection)
-        (applyForce cfg (Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m <+> rope_effect (gunConfig g) (pp <-> rayOrigin); _ → m) rayDirection guns))
+        (rayOrigin ^+^ rayDirection)
+        (applyForce cfg (Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m ^+^ rope_effect (gunConfig g) (pp ^-^ rayOrigin); _ → m) rayDirection guns))
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = collisionPoint body (Octree.query body tree >>= obstacleTriangles)
       -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate)
 
 move :: V → Player → Player
-move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body <+> v } }
+move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body ^+^ v } }
 
 collisionPoint :: Ray → [AnnotatedTriangle] → Maybe V
-collisionPoint r@Ray{..} t = (rayOrigin <+>) . (rayDirection <*>) . fst . collision r t
+collisionPoint r@Ray{..} t = (rayOrigin ^+^) . (rayDirection ^*) . fst . collision r t
 
 data Life = Life Player Life | Death V
 
@@ -149,7 +151,7 @@ randomAction tree cfg now = do
   where
     p = rayOrigin (body now)
     s = shootingRange cfg
-    nearby = Octree.query (Cube (p <-> Vector3 s s s) (p <+> Vector3 s s s)) tree >>= obstacleTriangles
+    nearby = Octree.query (Cube (p ^-^ Vector3 s s s) (p ^+^ Vector3 s s s)) tree >>= obstacleTriangles
 
 randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
 randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfig gpCfg LeftGun)

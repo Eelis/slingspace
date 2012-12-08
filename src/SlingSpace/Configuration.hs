@@ -3,14 +3,15 @@
 module SlingSpace.Configuration
   ( GameplayConfig(..)
   , Gun(..), GunConfig(..), GunGuiConfig(..), GuiConfig(..), Scheme(..), CameraConfig(..)
-  , Vector3(..), (<*>), (<+>), Color4(..)
+  , Vector3(..), Color4(..)
   , def, defaultObstacleColor
   ) where
 
 import Graphics.Rendering.OpenGL.GL
 import Logic (GunConfig(..), GameplayConfig(..), Gun(..))
 import Gui (GuiConfig(..), GunGuiConfig(..), CameraConfig(..), FloorConfig(..), GridType(..), Scheme(..))
-import Math ((<*>), (<+>))
+import Data.AdditiveGroup ((^+^))
+import Data.VectorSpace ((^*))
 import qualified Graphics.UI.GLFW as GLFW
 
 class Default a where def :: a
@@ -25,8 +26,8 @@ instance Default GameplayConfig where
   def = GameplayConfig
     { gunConfig = const def
     , applyForce =
-        (<*> 0.995) . -- friction
-        (<+> Vector3 0 (-0.13) 0) -- gravity
+        (^* 0.995) . -- friction
+        (^+^ Vector3 0 (-0.13) 0) -- gravity
     }
 
 instance Default CameraConfig where

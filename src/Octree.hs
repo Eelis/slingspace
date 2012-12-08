@@ -3,7 +3,9 @@
 module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
 import Graphics.Rendering.OpenGL.GL (Vector3(..))
-import Math (Collision(collide), FitsIn(fitsIn), Cube(..), (<*>), (<+>), (<->), (</>))
+import Math (Collision(collide), FitsIn(fitsIn), Cube(..))
+import Data.AdditiveGroup ((^+^), (^-^))
+import Data.VectorSpace ((^*), (^/))
 import Util (orElse)
 import Control.DeepSeq (NFData)
 
@@ -16,10 +18,10 @@ class Splittable t where split :: t → [t]
 
 instance Splittable Cube where
   split Cube{..} =
-      [Cube p (p <+> subSize) | i ← subIds, let p = cubeLoCorner <+> (t i subOff)]
+      [Cube p (p ^+^ subSize) | i ← subIds, let p = cubeLoCorner ^+^ (t i subOff)]
     where
-      subOff = (cubeHiCorner <-> cubeLoCorner) </> 3
-      subSize = subOff <*> 2
+      subOff = (cubeHiCorner ^-^ cubeLoCorner) ^/ 3
+      subSize = subOff ^* 2
       t (Vector3 x y z) (Vector3 a b c) = Vector3 (x * a) (y * b) (z * c)
       subIds =
         [ Vector3 0 0 0

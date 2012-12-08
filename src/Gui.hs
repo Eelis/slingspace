@@ -5,7 +5,9 @@ module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridTy
 import Data.Map (Map)
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
-import Math (V, (<+>), (<->), (<*>), x_rot_vector, y_rot_vector, tov, normalize_v, Ray(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
+import Math (V, x_rot_vector, y_rot_vector, tov, Ray(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
+import Data.AdditiveGroup ((^+^), (^-^))
+import Data.VectorSpace ((^*), normalized)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
@@ -124,7 +126,7 @@ drawEverything State{camera=CameraOrientation{..}, ..} = do
     rotateRadians cam_yrot $ Vector3 0 1 0
 
   whenJust (player controller >>= birth) $ \me → do
-  lift $ GL.translate $ (rayOrigin $ body me) <*> (-1)
+  lift $ GL.translate $ (rayOrigin $ body me) ^* (-1) -- todo
   drawPlayers $ mapMaybe birth $ players controller
   drawObstacles
   lift $ lighting $= Disabled
@@ -265,7 +267,7 @@ drawTree = lift . renderPrimitive Lines . go Nothing
     go mp t = do
       let
         s = cubeSize (fst t) / 2 :: GLdouble
-        center = cubeCorner (fst t) <+> Vector3 s s s
+        center = cubeCorner (fst t) ^+^ Vector3 s s s
       forM_ (Octree.subs t) (go (Just center))
       case mp of
         Nothing → return ()
@@ -301,7 +303,7 @@ drawRopes ps = do
   renderPrimitive Lines $ forM ps $ \p@Player{..} →
     forM_ (Map.toList (Logic.guns p)) $ \(gun, Rope{..}) → do
         GL.color $ gunColor gun
-        vertex $ tov $ rayOrigin body <+> (normalize_v (rayOrigin rope_ray <-> rayOrigin body) <*> (playerSize + 0.05))
+        vertex $ tov $ rayOrigin body ^+^ (normalized (rayOrigin rope_ray ^-^ rayOrigin body) ^* (playerSize + 0.05))
         vertex $ tov $ rayOrigin rope_ray
   return ()
 
@@ -312,10 +314,10 @@ drawOrientation p = do
   lift $ do
   GL.lineWidth $= rope_line_width
   renderPrimitive Lines $ forM p $ \Player{..} → do
-    vertex $ tov $ rayOrigin body <+> Vector3 (-100) 0 0
-    vertex $ tov $ rayOrigin body <+> Vector3 100 0 0
-    vertex $ tov $ rayOrigin body <+> Vector3 0 0 (-100)
-    vertex $ tov $ rayOrigin body <+> Vector3 0 0 100
+    vertex $ tov $ rayOrigin body ^+^ Vector3 (-100) 0 0
+    vertex $ tov $ rayOrigin body ^+^ Vector3 100 0 0
+    vertex $ tov $ rayOrigin body ^+^ Vector3 0 0 (-100)
+    vertex $ tov $ rayOrigin body ^+^ Vector3 0 0 100
   return ()
 
 drawObstacles :: Gui ()
@@ -456,7 +458,7 @@ cameraOffset CameraOrientation{..} =
   Vector3 0 0 (- cam_dist) `x_rot_vector` cam_xrot `y_rot_vector` cam_yrot
 
 gunRay :: CameraOrientation → V → GunConfig → GunGuiConfig → Ray
-gunRay c playerPos d g = Ray (playerPos <-> cameraOffset c) (gunDirection c g <*> shootingRange d)
+gunRay c playerPos d g = Ray (playerPos ^-^ cameraOffset c) (gunDirection c g ^* shootingRange d)
 
 guiTick :: Controller c ⇒ State c → Gui (State c)
 guiTick state@State{..} = do
