@@ -97,15 +97,11 @@ annotateTriangle a b c = AnnotatedTriangle{..}
 newtype OriginRay = OriginRay V
 
 data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
-data Plane = Plane { planeNormal, planePoint :: !V }
 data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Read, Show)
 data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) } deriving (Read, Show)
   -- Cube invariant: components of lo <= hi
 
 instance NFData Cube
-
-plane :: AnnotatedTriangle → Plane
-plane (AnnotatedTriangle n (a, _, _) _ _) = Plane n a
 
 class FitsIn o c where fitsIn :: o → c → Bool
 
@@ -192,9 +188,6 @@ instance Collision Ray Sphere Bool where
       b = 2 * (rayDirection <.> o)
       c = magnitudeSq o - sphereSquaredRadius
       o = rayOrigin ^-^ sphereCenter
-
-sameDirection :: V → V → Bool
-sameDirection a b = (a <.> b) >= 0
 
 instance Collision Ray AnnotatedTriangle (Maybe GLdouble) where
   collide a b = isJust $ collision a b
@@ -308,23 +301,11 @@ annotateObstacle obstacleTriangles = GeometricObstacle{obstacleSphere=Sphere{..}
     sphereCenter = foldr1 (^+^) (triangleCenter . obstacleTriangles) ^/ realToFrac (length obstacleTriangles)
     sphereSquaredRadius = maximum $ magnitudeSq . (^-^ sphereCenter) . (obstacleTriangles >>= tupleToList . triangleVertices)
 
-behind :: V → Plane → Bool
-behind v Plane{..} = sameDirection (planePoint ^-^ v) planeNormal
-
-point_in_obstacle :: GeometricObstacle → V → Bool
-point_in_obstacle o v = and $ behind v . plane . obstacleTriangles o
-
-tri_in_obstacle :: GeometricObstacle → AnnotatedTriangle → Bool
-tri_in_obstacle o = or . (point_in_obstacle o .) .  tupleToList . triangleVertices
-
 instance Collision GeometricObstacle GeometricObstacle Bool where
   collide = collision
   collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
 
 data MMatrix a = MMatrix !a !a !a !a !a !a !a !a !a deriving Show
-
-idMatrix :: Num a ⇒ MMatrix a
-idMatrix = MMatrix 1 0 0 0 1 0 0 0 1
 
 multMMatrix :: Num a ⇒ MMatrix a → MMatrix a → MMatrix a
 multMMatrix (MMatrix a00 a01 a02 a10 a11 a12 a20 a21 a22) (MMatrix b00 b01 b02 b10 b11 b12 b20 b21 b22) =

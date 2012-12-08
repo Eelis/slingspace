@@ -3,7 +3,7 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , collisionPoint, fire, tickPlayer, move
+  , collisionPoint, fire, tickPlayer
   , GameplayConfig(..), GunConfig(..)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction, safeFuture
   , toFloor
@@ -80,9 +80,6 @@ tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = collisionPoint body (Octree.query body tree >>= obstacleTriangles)
       -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate)
-
-move :: V → Player → Player
-move v p@Player{..} = p { body = body { rayOrigin = rayOrigin body ^+^ v } }
 
 collisionPoint :: Ray → [AnnotatedTriangle] → Maybe V
 collisionPoint r@Ray{..} t = (rayOrigin ^+^) . (rayDirection ^*) . fst . collision r t
