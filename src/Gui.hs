@@ -420,9 +420,6 @@ gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initia
   GL.attenuation ballLight $= ballLight_attenuation
   GL.colorMaterial $= Just (FrontAndBack, AmbientAndDiffuse)
 
-  GL.blend $= Enabled
-  GL.blendFunc $= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-
   [obstacleBuffer] ← GL.genObjectNames 1
   let size = fromIntegral obstacleCount * bytesPerObstacle
   GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
