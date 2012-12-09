@@ -393,8 +393,6 @@ gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initia
 
   GL.depthFunc $= Just GL.Lequal
   GL.clearColor $= fog_color
-  GL.lineWidth $= 3 -- Todo: Make configurable.
-  GL.pointSize $= 4 -- Todo: Make configurable.
   GL.cullFace $= Just Back
 
   if ugly
