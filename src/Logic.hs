@@ -13,7 +13,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Graphics.Rendering.OpenGL.GL (GLdouble, Vector3(..))
 import Math (V, GeometricObstacle(..), obstacleTriangles, Ray(..), collision, Cube(..), triangleCenter, AnnotatedTriangle, rayThrough)
-import Data.AdditiveGroup ((^+^), (^-^))
+import Data.AdditiveGroup ((^+^), (^-^), sumV)
 import Data.VectorSpace ((^*), (^/), magnitude, magnitudeSq)
 import Util ((.), randomItem, orElse)
 import Data.Maybe (listToMaybe)
@@ -52,8 +52,8 @@ fire c g mt p = p { guns = case mt of
   Nothing → Map.delete g $ guns p
   Just t → Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
 
-rope_effect :: GunConfig → V → V
-rope_effect GunConfig{ropeStrength} off =
+ropeForce :: GunConfig → V → V
+ropeForce GunConfig{ropeStrength} off =
   if p >= 0.1
     then off ^* (ropeStrength l / l)
     else Vector3 0 0 0
@@ -61,21 +61,24 @@ rope_effect GunConfig{ropeStrength} off =
     p = magnitudeSq off
     l = sqrt p
 
+ropesForce :: GameplayConfig → Player → V
+ropesForce GameplayConfig{gunConfig} Player{..} =
+  sumV [ropeForce (gunConfig g) (p ^-^ rayOrigin body) | (g, Rope (Ray p _) 0) ← Map.toList guns]
+
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin ^+^ rayDirection }
 
 tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
-tickPlayer tree cfg@GameplayConfig{gunConfig} Player{body=body@Ray{..}, ..} =
+tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} =
     case collisionPos of
       Just cp → Left cp
-      Nothing → Right $ Player{ body = newBody, guns = tickGun . guns }
+      Nothing → Right Player{
+        body = Ray (rayOrigin ^+^ rayDirection) (applyForce cfg (rayDirection ^+^ ropesForce cfg  p)),
+        guns = tickGun . guns }
   where
     Vector3 _ oldy _ = rayOrigin
     tickGun r@(Rope _ 0) = r
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
-    newBody = Ray
-        (rayOrigin ^+^ rayDirection)
-        (applyForce cfg (Map.foldrWithKey (\g r m → case r of Rope (Ray pp _) 0 → m ^+^ rope_effect (gunConfig g) (pp ^-^ rayOrigin); _ → m) rayDirection guns))
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
       | otherwise = collisionPoint body (Octree.query body tree >>= obstacleTriangles)
