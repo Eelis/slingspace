@@ -49,14 +49,6 @@ data Box c a = Box
 
 instance (NFData c, NFData a) ⇒ NFData (Box c a)
 
-showBox :: Show a ⇒ Box c a → [String]
-showBox Box{..} =
-  ("[" ++ replicate (length objects) '+' {-show objects-} ++ "]") : map ("  " ++)
-    (concatMap (maybe [] showBox . snd) (Vector.toList subBoxes))
-
-instance Show a ⇒ Show (Box c a) where
-  show = unlines . showBox
-
 type CubeBox c a = (c, Box c a)
 
 boxToList :: Box c a → [a]
@@ -83,12 +75,12 @@ doInsert obj cube mb
       Nothing → Nothing
       Just x → Just (c', Just x)
 
-insert :: (Splittable c, Show c, Show a, FitsIn a c) ⇒ CubeBox c a → a → CubeBox c a
+insert :: (Splittable c, FitsIn a c) ⇒ CubeBox c a → a → CubeBox c a
 insert (c, b) o
   | Just b' ← doInsert o c (Just b) = (c, b')
-  | otherwise = error $ "object " ++ show o ++ " did not fit in cube " ++ show c
+  | otherwise = error "object did not fit in cube"
 
-fromList :: (Show a, FitsIn a Cube) ⇒ Cube → [a] → CubeBox Cube a
+fromList :: (FitsIn a Cube) ⇒ Cube → [a] → CubeBox Cube a
 fromList c = foldl insert (empty c)
 
 subs :: CubeBox c a → [CubeBox c a]

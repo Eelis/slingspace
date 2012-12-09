@@ -48,7 +48,6 @@ randomVector3 size = getRandomR (Vector3 (-size) (-size) (-size), Vector3 size s
 type V = Vector3 GLdouble
 
 data Matrix33 a = Matrix33 !(Vector3 a) !(Vector3 a) !(Vector3 a) -- three rows
-  deriving (Eq, Show, Read)
 
 scalar_matrix_mult :: VectorSpace (Vector3 a) ⇒ Scalar (Vector3 a) → Matrix33 a → Matrix33 a
 scalar_matrix_mult x (Matrix33 a b c) = Matrix33 (a ^* x) (b ^* x) (c ^* x)
@@ -82,7 +81,6 @@ data AnnotatedTriangle = AnnotatedTriangle
   , triangleCenter :: !V
   , toTriangleCoords :: !(Matrix33 GLdouble) -- maps world coordinates to triangle coordinates with (b-a, c-a, normal) as basis
   } -- should only ever be constructed using annotate_triangle
-  deriving (Show, Read, Eq)
 
 annotateTriangle :: (GLdouble ~ Scalar (Vector3 GLdouble)) => V → V → V → AnnotatedTriangle
 annotateTriangle a b c = AnnotatedTriangle{..}
@@ -96,9 +94,9 @@ annotateTriangle a b c = AnnotatedTriangle{..}
 
 newtype OriginRay = OriginRay V
 
-data Ray = Ray { rayOrigin, rayDirection :: !V } deriving (Read, Show)
-data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Read, Show)
-data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) } deriving (Read, Show)
+data Ray = Ray { rayOrigin, rayDirection :: !V }
+data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble }
+data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) }
   -- Cube invariant: components of lo <= hi
 
 instance NFData Cube
@@ -256,8 +254,7 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
 
 data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
-  , obstacleTriangles :: ![AnnotatedTriangle]
-  } deriving (Show, Read)
+  , obstacleTriangles :: ![AnnotatedTriangle] }
 
 triangleCube :: AnnotatedTriangle -> Cube
 triangleCube AnnotatedTriangle{triangleVertices=(Vector3 x y z, Vector3 x' y' z', Vector3 x'' y'' z'')} =
@@ -305,7 +302,7 @@ instance Collision GeometricObstacle GeometricObstacle Bool where
   collide = collision
   collision a b = or [x `collision` y | x ← obstacleTriangles a, y ← obstacleTriangles b]
 
-data MMatrix a = MMatrix !a !a !a !a !a !a !a !a !a deriving Show
+data MMatrix a = MMatrix !a !a !a !a !a !a !a !a !a
 
 multMMatrix :: Num a ⇒ MMatrix a → MMatrix a → MMatrix a
 multMMatrix (MMatrix a00 a01 a02 a10 a11 a12 a20 a21 a22) (MMatrix b00 b01 b02 b10 b11 b12 b20 b21 b22) =

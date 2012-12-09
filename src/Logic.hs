@@ -32,9 +32,9 @@ data GameplayConfig = GameplayConfig
   , applyForce :: V → V
   } deriving Typeable
 
-data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer } deriving (Read, Show)
+data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer }
 
-data Gun = LeftGun | RightGun deriving (Read, Show, Ord, Eq, Enum)
+data Gun = LeftGun | RightGun deriving (Ord, Eq, Enum)
 
 data Player = Player
   { body :: !Ray
