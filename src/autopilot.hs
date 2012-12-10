@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE UnicodeSyntax, ScopedTypeVariables, ViewPatterns #-}
 
 import Playback (playback)
 import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction, SimulationConfig(..))

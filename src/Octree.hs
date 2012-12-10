@@ -18,7 +18,7 @@ class Splittable t where split :: t → [t]
 
 instance Splittable Cube where
   split Cube{..} =
-      [Cube p (p ^+^ subSize) | i ← subIds, let p = cubeLoCorner ^+^ (t i subOff)]
+      [Cube p (p ^+^ subSize) | i ← subIds, let p = cubeLoCorner ^+^ t i subOff]
     where
       subOff = (cubeHiCorner ^-^ cubeLoCorner) ^/ 3
       subSize = subOff ^* 2

@@ -11,13 +11,12 @@ import Graphics.Rendering.OpenGL.GL (Vector3(..))
 import Obstacles (ObstacleTree, grow, randomObs)
 import Prelude hiding ((.))
 import Control.Monad (replicateM, liftM2)
-import Control.Monad.Random (evalRandIO)
+import Control.Monad.Random (evalRandIO, MonadRandom(..))
 import Guided (Guided(..))
 import Controllers (Controller(..), BasicController(..))
 import Stalker (Stalker(Stalker))
 -- import qualified Recorder
 import System.Random (mkStdGen)
-import Control.Monad.Random (MonadRandom(..))
 import qualified SlingSpace.Configuration
 
 trainingWheels, sideKick :: Bool
@@ -65,7 +64,7 @@ main = do
     in
       --Recorder.record $
       (if trainingWheels then Any . Guided else id) $
-      (if sideKick then Any . Stalker stalker (mkStdGen 3) else id) $
+      (if sideKick then Any . Stalker stalker (mkStdGen 3) else id)
       (Any C{obstacles=tree, life=live tree simCfg initialPlayer, ..} :: Any BasicController)
 
   --putStrLn $ show (length (Recorder.frames r)) ++ " frames."

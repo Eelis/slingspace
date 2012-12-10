@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, PatternGuards, TypeOperators, TypeFamilies, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, TypeOperators, TypeFamilies, FlexibleContexts #-}
 
 module Math where
 
@@ -88,8 +88,8 @@ annotateTriangle a b c = AnnotatedTriangle{..}
     triangleNormal@(Vector3 nx ny nz) = normalized (cross3 atob atoc)
     triangleVertices = (a, b, c)
     triangleCenter = (a ^+^ b ^+^ c) ^/ 3
-    atob@(Vector3 bx by bz) = (b ^-^ a)
-    atoc@(Vector3 cx cy cz) = (c ^-^ a)
+    atob@(Vector3 bx by bz) = b ^-^ a
+    atoc@(Vector3 cx cy cz) = c ^-^ a
     toTriangleCoords = inv $ Matrix33 (Vector3 bx cx nx) (Vector3 by cy ny) (Vector3 bz cz nz)
 
 newtype OriginRay = OriginRay V
@@ -228,7 +228,7 @@ storeVertex = Store.run $ liftA3 StoredVertex
   (Store.element storedColor)
 
 asStoredVertices :: [VisualObstacle] → SV.Vector StoredVertex
-asStoredVertices obstacles = SV.pack $
+asStoredVertices obstacles = SV.pack
   [ StoredVertex vertex triangleNormal obstacleColor
   | VisualObstacle{..} ← obstacles
   , AnnotatedTriangle{..} ← obstacleTriangles geometricObstacle
@@ -335,9 +335,6 @@ x_rot_vector, y_rot_vector :: Floating a ⇒ Vector3 a → a → Vector3 a
 
 x_rot_vector (Vector3 x y z) r = Vector3 x (y * cos r + z * sin r) (y * (- sin r) + z * cos r)
 y_rot_vector (Vector3 x y z) r = Vector3 (x * cos r + z * (- sin r)) y (x * sin r + z * cos r)
-
-wrap :: Ord a ⇒ a → a → a → a
-wrap n lower upper = if n < lower then upper else if n > upper then lower else n
 
 modIntegralPart :: RealFrac r ⇒ r → Integer → r
 modIntegralPart (properFraction → (i, f)) n = fromInteger (i `mod` n) + f
