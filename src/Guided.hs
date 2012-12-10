@@ -3,9 +3,8 @@
 module Guided (Guided(..)) where
 
 import Controllers (Controller(..), BasicController(..))
-import Util (whenJust)
 import Logic (Life, lifeExpectancyUpto)
-import Control.Monad (liftM2, guard)
+import Control.Monad (guard)
 import Data.Function (on)
 
 newtype Guided c = Guided { trainee :: c }
@@ -18,7 +17,7 @@ instance BasicController c ⇒ Controller (Guided c) where
   tick c = c{ trainee = tick (trainee c) }
   fire g v c = do
     t ← fire g v (trainee c)
-    whenJust (liftM2 betterThan (player t) (player (trainee c))) guard
+    guard (player t `betterThan` player (trainee c))
     return c{trainee=t}
    where
     betterThan :: Life → Life → Bool

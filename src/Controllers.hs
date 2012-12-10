@@ -6,11 +6,10 @@ import Logic (Life, Gun, SimulationConfig, future)
 import Obstacles (ObstacleTree)
 import Math (V)
 import Util (Any(Any))
-import Data.Maybe (maybeToList)
+import Control.Applicative (liftA2)
 
 class Controller c where
-  player :: c → Maybe Life
-  player = const Nothing
+  player :: c → Life
   others :: c → [Life]
   others = const []
   tick :: c → c
@@ -26,12 +25,11 @@ instance Controller (Any Controller) where -- ghc /should/ be able to generate t
   fire g v (Any c) = Any `fmap` fire g v c
 
 players :: Controller c ⇒ c → [Life]
-players c = maybeToList (player c) ++ others c
+players = liftA2 (:) player others
 
 instance Controller Life where
-  player = Just
+  player = id
   tick = future
-
 
 class Controller c ⇒ BasicController c where
   controllerObstacles :: c → ObstacleTree

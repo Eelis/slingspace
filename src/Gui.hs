@@ -127,7 +127,7 @@ drawEverything State{camera=CameraOrientation{..}, ..} = do
     rotateRadians cam_xrot $ Vector3 1 0 0
     rotateRadians cam_yrot $ Vector3 0 1 0
 
-  whenJust (player controller >>= birth) $ \me → do
+  whenJust (birth $ player controller) $ \me → do
   lift $ GL.translate $ (rayOrigin $ body me) ^* (-1) -- todo
   drawPlayers $ mapMaybe birth $ players controller
   drawObstacles
@@ -477,7 +477,7 @@ guiTick state@State{..} = do
     -- errs ← get errors
     -- print $ "[" ++ (show errs) ++ "]"
 
-  case player controller >>= birth of
+  case birth $ player controller of
     Nothing → return state
     Just Player{body} → do
       let (newGuns, newController) = CMS.runState (Map.traverseWithKey (f static camera (rayOrigin body)) guns) controller

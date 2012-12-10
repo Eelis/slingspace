@@ -36,9 +36,7 @@ instance BasicController c ⇒ BasicController (Stalker c) where
 stalk :: BasicController c ⇒ Stalker c → c → Stalker c
 stalk Stalker{..} stalked' = Stalker stalker' prng' stalked'
   where
-    (stalker', prng') = case player stalked' of
-      Just l → runRand (reviseIfWise (tryRandomAction (betterThan (positions l)) (controllerObstacles stalked) (controllerConfig stalked)) stalker) prng
-      Nothing → (stalker, prng)
+    (stalker', prng') = runRand (reviseIfWise (tryRandomAction (betterThan (positions (player stalked'))) (controllerObstacles stalked) (controllerConfig stalked)) stalker) prng
 
 instance BasicController c ⇒ Controller (Stalker c) where
   player = player . stalked
