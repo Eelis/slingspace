@@ -2,14 +2,14 @@
 
 module Playback (playback) where
 
-import Logic (Life)
+import Logic (Life, RefreshRate)
 import Gui (gui, GuiConfig)
 import Math (VisualObstacle, asStoredVertices)
 import Obstacles (ObstacleTree)
 import Graphics.Rendering.OpenGL.GL (GLdouble)
 import qualified SlingSpace.Configuration
 
-playback :: [VisualObstacle] → ObstacleTree → GuiConfig → GLdouble → Life → IO ()
+playback :: [VisualObstacle] → ObstacleTree → GuiConfig → GLdouble → (RefreshRate → Life) → IO ()
   -- non-interactive display of a life
 playback obstacles tree guiConfig viewDir life = gui
   (asStoredVertices obstacles)

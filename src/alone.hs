@@ -1,7 +1,7 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, NamedFieldPuns, ViewPatterns #-}
 
 import Gui (gui)
-import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth)
+import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth, SimulationConfig(..))
 import qualified Data.Map as Map
 import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices, randomAngle, unitCirclePoint)
 import Data.AdditiveGroup ((^+^))
@@ -24,17 +24,17 @@ trainingWheels, sideKick :: Bool
 trainingWheels = False
 sideKick = False
 
-data C = C { life :: Life, obstacles :: ObstacleTree, gpCfg :: GameplayConfig }
+data C = C { life :: Life, obstacles :: ObstacleTree, simCfg :: SimulationConfig }
 
 instance BasicController C where
   controllerObstacles = obstacles
-  controllerGpCfg = gpCfg
+  controllerConfig = simCfg
 
 instance Controller C where
   player = Just . life
-  tick c@C{..} = c{life=safeFuture (controllerObstacles c) (controllerGpCfg c) life}
+  tick c@C{..} = c{life=safeFuture (controllerObstacles c) (controllerConfig c) life}
   fire g v c@C{..} = do
-    l ← live (controllerObstacles c) (controllerGpCfg c) . Logic.fire (gunConfig gpCfg g) g v . birth life
+    l ← live (controllerObstacles c) (controllerConfig c) . Logic.fire simCfg g v . birth life
     return c{life=l}
 
 rawObstacles :: (Functor m, MonadRandom m) ⇒ m [GeometricObstacle]
@@ -57,14 +57,16 @@ main = do
     vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
     initialPosition = Vector3 0 1800 30000
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
-    stalker = live tree gpCfg (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty)
 
   {-r ←-}
-  gui vertices tree guiConfig gunConfig 0 $
-    --Recorder.record $
-    (if trainingWheels then Any . Guided else id) $
-    (if sideKick then Any . Stalker stalker (mkStdGen 3) else id) $
-    (Any C{obstacles=tree, life=live tree gpCfg initialPlayer, ..} :: Any BasicController)
+  gui vertices tree guiConfig gunConfig 0 $ \(SimulationConfig gpCfg → simCfg) →
+    let
+      stalker = live tree simCfg (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty)
+    in
+      --Recorder.record $
+      (if trainingWheels then Any . Guided else id) $
+      (if sideKick then Any . Stalker stalker (mkStdGen 3) else id) $
+      (Any C{obstacles=tree, life=live tree simCfg initialPlayer, ..} :: Any BasicController)
 
   --putStrLn $ show (length (Recorder.frames r)) ++ " frames."
   return ()

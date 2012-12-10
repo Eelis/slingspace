@@ -3,8 +3,8 @@
 module Logic
   ( Gun(..), Rope(..)
   , Player(..)
-  , collisionPoint, fire, tickPlayer
-  , GameplayConfig(..), GunConfig(..)
+  , collisionPoint, fire, tickPlayer, RefreshRate
+  , GameplayConfig(..), SimulationConfig(..), GunConfig(..)
   , Life(..), lifeAfter, live, moments, lifeExpectancyUpto, birth, future, orAlternativeLife, reviseIfWise, keepTrying, positions, tryRandomAction, safeFuture
   , toFloor
   ) where
@@ -24,33 +24,42 @@ import Control.Monad.Random (MonadRandom, getRandomR)
 import Data.Typeable (Typeable)
 
 data GunConfig = GunConfig
-  { shootingSpeed, shootingRange :: GLdouble
+  { shootingSpeed :: GLdouble -- in units/second
+  , shootingRange :: GLdouble
   , ropeStrength :: GLdouble → GLdouble }
+
+type RefreshRate = GLdouble
 
 data GameplayConfig = GameplayConfig
   { gunConfig :: Gun → GunConfig
-  , applyForce :: V → V
+  , gravity :: V -- in units/second²
+  , drag :: GLdouble
   } deriving Typeable
+
+data SimulationConfig = SimulationConfig
+  { gameplayConfig :: GameplayConfig
+  , refreshRate :: RefreshRate }
 
 data Rope = Rope { rope_ray :: Ray, rope_eta :: !Integer }
 
 data Gun = LeftGun | RightGun deriving (Ord, Eq, Enum)
 
 data Player = Player
-  { body :: !Ray
+  { body :: !Ray -- with direction in units/second
   , guns :: Map Gun Rope } -- todo: more appropriate data structure..
 
-fireRope :: GunConfig → V → V → Rope
-fireRope c t pos = Rope (Ray pos dir) eta
-  where
-   off = t ^-^ pos
-   eta = round $ magnitude off / shootingSpeed c
-   dir = off ^/ fromInteger eta
+fireRope :: SimulationConfig → Gun → V → V → Rope
+fireRope SimulationConfig{gameplayConfig=GameplayConfig{..},..} g target rayOrigin =
+  Rope Ray{..} eta
+ where
+  off = target ^-^ rayOrigin
+  eta = round $ (magnitude off / shootingSpeed (gunConfig g)) * refreshRate
+  rayDirection = off ^/ fromInteger eta
 
-fire :: GunConfig → Gun → Maybe V → Player → Player
+fire :: SimulationConfig → Gun → Maybe V → Player → Player
 fire c g mt p = p { guns = case mt of
   Nothing → Map.delete g $ guns p
-  Just t → Map.insert g (fireRope c t (rayOrigin (body p))) (guns p) }
+  Just t → Map.insert g (fireRope c g t (rayOrigin (body p))) (guns p) }
 
 ropeForce :: GunConfig → V → V
 ropeForce GunConfig{ropeStrength} off =
@@ -68,21 +77,23 @@ ropesForce GameplayConfig{gunConfig} Player{..} =
 progressRay :: Ray → Ray
 progressRay r@Ray{..} = r { rayOrigin = rayOrigin ^+^ rayDirection }
 
-tickPlayer :: ObstacleTree → GameplayConfig → Player → Either V Player
-tickPlayer tree cfg p@Player{body=body@Ray{..}, ..} =
+tickPlayer :: ObstacleTree → SimulationConfig → Player → Either V Player
+tickPlayer tree cfg@SimulationConfig{gameplayConfig=GameplayConfig{..}} p@Player{body=Ray{..}, ..} =
     case collisionPos of
       Just cp → Left cp
       Nothing → Right Player{
-        body = Ray (rayOrigin ^+^ rayDirection) (applyForce cfg (rayDirection ^+^ ropesForce cfg  p)),
+        body = Ray newRayOri newRayDir,
         guns = tickGun . guns }
   where
+    newRayDir = (rayDirection ^+^ ((ropesForce (gameplayConfig cfg) p ^+^ gravity) ^/ refreshRate cfg)) ^* (drag ** (1/refreshRate cfg))
+    newRayOri = rayOrigin ^+^ (((rayDirection ^+^ newRayDir) ^/ 2) ^/ refreshRate cfg)
     Vector3 _ oldy _ = rayOrigin
     tickGun r@(Rope _ 0) = r
     tickGun (Rope ray n) = Rope (progressRay ray) (n - 1)
+    collisionRay = Ray rayOrigin (newRayOri ^-^ rayOrigin)
     collisionPos
       | oldy < 0 = Just (toFloor rayOrigin)
-      | otherwise = collisionPoint body (Octree.query body tree >>= obstacleTriangles)
-      -- using rayOrigin instead of body as the query only reduces the benchmark runtime by about 5% (and would of course be inaccurate)
+      | otherwise = collisionPoint collisionRay (Octree.query collisionRay tree >>= obstacleTriangles)
 
 collisionPoint :: Ray → [AnnotatedTriangle] → Maybe V
 collisionPoint r@Ray{..} t = (rayOrigin ^+^) . (rayDirection ^*) . fst . collision r t
@@ -100,11 +111,11 @@ lifeExpectancyUpto m = go 0
       | Life _ l' ← l, n /= m = go (n+1) l'
       | otherwise = n
 
-lifeAfter :: ObstacleTree → GameplayConfig → Player → Life
+lifeAfter :: ObstacleTree → SimulationConfig → Player → Life
 lifeAfter tree cfg = go
   where go p = either Death (\q → Life q (go q)) $ tickPlayer tree cfg p
 
-live :: ObstacleTree → GameplayConfig → Player → Life
+live :: ObstacleTree → SimulationConfig → Player → Life
 live tree cfg p = Life p (lifeAfter tree cfg p)
 
 birth :: Life → Maybe Player -- Nothing if stillborn
@@ -117,7 +128,7 @@ future :: Life → Life
 future (Life _ l) = l
 future l = l
 
-safeFuture :: ObstacleTree → GameplayConfig → Life → Life
+safeFuture :: ObstacleTree → SimulationConfig → Life → Life
   -- i.e. a future that isn't death
 safeFuture t c (Death v) = live t c $ Player (Ray v (Vector3 0 0 0)) Map.empty
 safeFuture t c (Life p (Death v)) = live t c $ Player (Ray v (Vector3 0 0 0)) (guns p)
@@ -140,7 +151,7 @@ keepTrying f l = reviseIfWise f l >>= mapFuture (keepTrying f)
 positions :: Life → [V]
 positions = map (rayOrigin . body) . moments
 
-randomAction :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GunConfig → Player → m Player
+randomAction :: (Functor m, MonadRandom m) ⇒ ObstacleTree → SimulationConfig → Player → m Player
 randomAction tree cfg now = do
   i :: Int ← getRandomR (0, 10)
   if i == 0
@@ -150,17 +161,17 @@ randomAction tree cfg now = do
       Just (triangleCenter → c) → return $ fire cfg LeftGun (Just (collisionPoint (rayThrough p c) nearby `orElse` c)) now
   where
     p = rayOrigin (body now)
-    s = shootingRange cfg
+    s = shootingRange (gunConfig (gameplayConfig cfg) LeftGun)
     nearby = Octree.query (Cube (p ^-^ Vector3 s s s) (p ^+^ Vector3 s s s)) tree >>= obstacleTriangles
 
-randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → GameplayConfig → Player → m Life
-randomLife tree gpCfg = fmap (live tree gpCfg) . randomAction tree (gunConfig gpCfg LeftGun)
+randomLife :: (Functor m, MonadRandom m) ⇒ ObstacleTree → SimulationConfig → Player → m Life
+randomLife t c = fmap (live t c) . randomAction t c
 
 tryRandomAction :: (Functor m, MonadRandom m) ⇒
-  (Life → Life → Bool) → ObstacleTree → GameplayConfig → Life → m Life
+  (Life → Life → Bool) → ObstacleTree → SimulationConfig → Life → m Life
 tryRandomAction _ _ _ d@(Death _) = return d -- hunter-to-be already dead
-tryRandomAction cmp tree gpCfg current@(Life now _) = do
-  alternative ← randomLife tree gpCfg now
+tryRandomAction cmp tree c current@(Life now _) = do
+  alternative ← randomLife tree c now
   return $ if future alternative `cmp` future current
     then alternative
     else Death (rayOrigin $ body $ now)

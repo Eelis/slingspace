@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf, FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, UnicodeSyntax, ScopedTypeVariables, PatternGuards, NamedFieldPuns, DeriveDataTypeable, MultiWayIf, FlexibleInstances, LambdaCase #-}
 
 module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridType(..), CameraConfig(..), gui) where
 
@@ -9,11 +9,12 @@ import Math (V, x_rot_vector, y_rot_vector, tov, Ray(..), trianglesPerObstacle, 
 import Data.AdditiveGroup ((^+^), (^-^))
 import Data.VectorSpace ((^*), normalized)
 import Data.Maybe (isJust, mapMaybe)
+import Data.Char (isDigit)
 import Control.Monad (when, forM_, unless)
 import Data.Traversable (forM)
 import Control.Monad.Fix (fix)
-import Logic (Player(Player,body), Gun(..), Rope(..), Life(..), positions, birth, GunConfig(shootingRange), collisionPoint)
-import Util ((.), getDataFileName, whenJust, loadConfig)
+import Logic (Player(Player,body), Gun(..), Rope(..), Life(..), positions, birth, GunConfig(shootingRange), collisionPoint, RefreshRate)
+import Util ((.), getDataFileName, whenJust, loadConfig, orElse)
 import Prelude hiding ((.), mapM)
 import Control.Monad.Reader (ReaderT(..), ask, asks, lift)
 import Foreign.Ptr (nullPtr, plusPtr, Ptr)
@@ -23,6 +24,8 @@ import Control.DeepSeq (deepseq)
 import Obstacles (ObstacleTree)
 import Data.Typeable (Typeable)
 import Controllers (Controller(..), players)
+import System.Process as Process
+import System.Exit (ExitCode(ExitSuccess))
 
 import qualified Octree
 import qualified Logic
@@ -76,7 +79,6 @@ data GuiConfig = GuiConfig
   , schemeFile :: String
   , restart_key, pause_key, exit_key :: GLFW.Key
   , gunForButton :: GLFW.MouseButton → Maybe Gun
-  , tickDuration :: Double -- in seconds
   } deriving Typeable
 
 data Static = Static
@@ -201,21 +203,16 @@ glfwLoop initialState = do
   GLFW.setWindowCloseCallback $ writeIORef closeRef True >> return True
 
   GLFW.resetTime
-  flip fix 0 $ \loop t → do
-    n ← GLFW.getTime
+  fix $ \loop → do
     state ← readIORef stateRef
-    if n > t
-      then do
-        s ← runReaderT (guiTick state) context
-        writeIORef stateRef s
-        loop $ t + tickDuration
-      else do
-        runReaderT (drawEverything state) context
-        GLFW.swapBuffers
-        GLFW.pollEvents
-        b ← GLFW.keyIsPressed exit_key
-        c ← readIORef closeRef
-        unless (b || c) $ loop t
+    s ← runReaderT (guiTick state) context
+    writeIORef stateRef s
+    runReaderT (drawEverything s) context
+    GLFW.swapBuffers
+    GLFW.pollEvents
+    b ← GLFW.keyIsPressed exit_key
+    c ← readIORef closeRef
+    unless (b || c) loop
 
   readIORef stateRef
 
@@ -363,28 +360,41 @@ drawFutures ls = do
   GL.color green
   forM_ ls $ GL.renderPrimitive LineStrip . mapM_ (vertex . tov) . take 500 . positions
 
-gui :: Controller c ⇒ SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
-  c → IO c
-gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
+nvidiaRefreshRate :: IO (Maybe RefreshRate)
+  -- See https://svn.reviewboard.kde.org/r/5900/
+nvidiaRefreshRate =
+  Process.readProcessWithExitCode "nvidia-settings" ["-t","-q","RefreshRate"] "" >>= return . \case
+    (ExitSuccess, read . takeWhile isDigit → rr, "") → Just rr
+    _ → Nothing
 
-  let initialOrientation = CameraOrientation (zoom camConf 0) 0 initialCamYrot
+refreshRate :: IO RefreshRate
+refreshRate = do
+  mrr ← nvidiaRefreshRate
+  rr ← GLFW.getWindowRefreshRate
+  return $ mrr `orElse` fromIntegral rr
+
+gui :: Controller c ⇒ SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
+  (RefreshRate → c) → IO c
+gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
 
   deepseq tree $ do
 
   scheme@Scheme{..} :: Scheme
     ← getDataFileName "schemes" >>= loadConfig . (++ "/" ++ schemeFile)
 
+  True ← GLFW.initialize
+
+  rr ← refreshRate
+
   let
     obstacleCount = SV.length storedObstacles `div` verticesPerObstacle
     initialState = State
-      { controller = initialController
+      { controller = initialController rr
       , paused = True
-      , camera = initialOrientation
+      , camera = CameraOrientation (zoom camConf 0) 0 initialCamYrot
       , guns = initialGuns }
 
-  GLFW.initialize -- todo: check return value
-
-  GLFW.openWindow GLFW.defaultDisplayOptions -- todo: check return value
+  True ← GLFW.openWindow GLFW.defaultDisplayOptions
     { GLFW.displayOptions_numRedBits = 8
     , GLFW.displayOptions_numGreenBits = 8
     , GLFW.displayOptions_numBlueBits = 8

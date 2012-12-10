@@ -31,13 +31,13 @@ data Stalker c = Stalker { stalker :: Life, prng :: StdGen, stalked :: c }
 
 instance BasicController c ⇒ BasicController (Stalker c) where
   controllerObstacles = controllerObstacles . stalked
-  controllerGpCfg = controllerGpCfg . stalked
+  controllerConfig = controllerConfig . stalked
 
 stalk :: BasicController c ⇒ Stalker c → c → Stalker c
 stalk Stalker{..} stalked' = Stalker stalker' prng' stalked'
   where
     (stalker', prng') = case player stalked' of
-      Just l → runRand (reviseIfWise (tryRandomAction (betterThan (positions l)) (controllerObstacles stalked) (controllerGpCfg stalked)) stalker) prng
+      Just l → runRand (reviseIfWise (tryRandomAction (betterThan (positions l)) (controllerObstacles stalked) (controllerConfig stalked)) stalker) prng
       Nothing → (stalker, prng)
 
 instance BasicController c ⇒ Controller (Stalker c) where

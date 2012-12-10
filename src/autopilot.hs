@@ -1,7 +1,7 @@
-{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, UnicodeSyntax, ScopedTypeVariables, ViewPatterns #-}
 
 import Playback (playback)
-import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction)
+import Logic (Player(..), Life(..), lifeExpectancyUpto, live, moments, keepTrying, tryRandomAction, SimulationConfig(..))
 import qualified Data.Map as Map
 import Math (GeometricObstacle(..), Ray(..), VisualObstacle(..))
 import Util ((.), average, loadConfig, getDataFileName, getMonotonicMilliSecs)
@@ -42,12 +42,13 @@ main = do
     (tree, obstacles) = grow $ evalRand rawObstacles (mkStdGen 4)
     initialPosition = Vector3 0 1800 (-2000)
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
-    life = evalRand (keepTrying (tryRandomAction betterThan tree gpCfg) (live tree gpCfg initialPlayer)) (mkStdGen 3)
+    life (SimulationConfig gpCfg → c) =
+      evalRand (keepTrying (tryRandomAction betterThan tree c) (live tree c initialPlayer)) (mkStdGen 3)
 
   if benchmark
     then deepseq tree $ do
       t ← getMonotonicMilliSecs
-      print $ length $ moments life
+      print $ length $ moments (life 60)
       t' ← getMonotonicMilliSecs
       print $ t' - t
     else playback

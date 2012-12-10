@@ -10,25 +10,21 @@ module SlingSpace.Configuration
 import Graphics.Rendering.OpenGL.GL
 import Logic (GunConfig(..), GameplayConfig(..), Gun(..))
 import Gui (GuiConfig(..), GunGuiConfig(..), CameraConfig(..), FloorConfig(..), GridType(..), Scheme(..))
-import Data.AdditiveGroup ((^+^))
-import Data.VectorSpace ((^*))
 import qualified Graphics.UI.GLFW as GLFW
 
 class Default a where def :: a
 
 instance Default GunConfig where
   def = GunConfig
-    { ropeStrength = (0.013 *) . (** 0.49)
-    , shootingSpeed = 75.0
+    { ropeStrength = (130 *) . (** 0.49)
+    , shootingSpeed = 7500
     , shootingRange = 5000.0 }
 
 instance Default GameplayConfig where
   def = GameplayConfig
     { gunConfig = const def
-    , applyForce =
-        (^* 0.995) . -- friction
-        (^+^ Vector3 0 (-0.13) 0) -- gravity
-    }
+    , gravity = Vector3 0 (-1050) 0
+    , drag = 0.7 }
 
 instance Default CameraConfig where
   def = CameraConfig
@@ -54,8 +50,7 @@ instance Default GuiConfig where
     , gunForButton = \case
         GLFW.MouseButton0 → Just LeftGun
         GLFW.MouseButton1 → Just RightGun
-        _ → Nothing
-    , tickDuration = 0.01 }
+        _ → Nothing }
 
 defaultObstacleColor :: Color3 GLdouble
 defaultObstacleColor = Color3 0.9 0.9 0.9

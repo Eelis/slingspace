@@ -2,7 +2,7 @@
 
 module Controllers (Controller(..), BasicController(..), players) where
 
-import Logic (Life, Gun, GameplayConfig, future)
+import Logic (Life, Gun, SimulationConfig, future)
 import Obstacles (ObstacleTree)
 import Math (V)
 import Util (Any(Any))
@@ -35,7 +35,7 @@ instance Controller Life where
 
 class Controller c ⇒ BasicController c where
   controllerObstacles :: c → ObstacleTree
-  controllerGpCfg :: c → GameplayConfig
+  controllerConfig :: c → SimulationConfig
     -- assumed to remain constant
 
 instance Controller (Any BasicController) where -- ghc /should/ be able to generate this
@@ -46,4 +46,4 @@ instance Controller (Any BasicController) where -- ghc /should/ be able to gener
 
 instance BasicController (Any BasicController) where -- ghc /should/ be able to generate this
   controllerObstacles (Any c) = controllerObstacles c
-  controllerGpCfg (Any c) = controllerGpCfg c
+  controllerConfig (Any c) = controllerConfig c
