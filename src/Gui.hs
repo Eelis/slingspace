@@ -5,7 +5,7 @@ module Gui (Scheme(..), GuiConfig(..), GunGuiConfig(..), FloorConfig(..), GridTy
 import Data.Map (Map)
 import Graphics.Rendering.OpenGL.GL (Vector3(..), GLdouble, ($=), Vertex3(..), Vertex4(..), vertex, PrimitiveMode(..), GLfloat, Color4(..), GLclampf, ClearBuffer(..), Face(..), Capability(..), hint, renderPrimitive, lighting, ColorMaterialParameter(AmbientAndDiffuse), MatrixComponent, rotate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
-import Math (V, x_rot_vector, y_rot_vector, tov, Ray(..), trianglesPerObstacle, verticesPerTriangle, StoredVertex, bytesPerObstacle, verticesPerObstacle, obstacleTriangles)
+import Math (V, x_rot_vector, y_rot_vector, tov, Ray(..), StoredVertex, bytesPerObstacle, obstacleTriangles, VisualObstacle, asStoredVertices)
 import Data.AdditiveGroup ((^+^), (^-^))
 import Data.VectorSpace ((^*), normalized)
 import Data.Maybe (isJust, mapMaybe)
@@ -87,7 +87,7 @@ data Static = Static
   , scheme :: Scheme
   , guiConfig :: GuiConfig
   , gunConfig :: Gun → GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
-  , obstacleCount :: Int
+  , vertexCount :: Int
   , tree :: ObstacleTree }
 
 type Gui = ReaderT Static IO
@@ -323,8 +323,8 @@ drawObstacles = do
   GL.arrayPointer GL.ColorArray
     $= GL.VertexArrayDescriptor 3 GL.Double bytesPerVertex (plusPtr nullPtr (2 * bytesPerVector))
 
-  let totalVertices = obstacleCount * trianglesPerObstacle * verticesPerTriangle
-  GL.drawArrays Triangles 0 (fromIntegral totalVertices)
+  --let totalVertices = obstacleCount * trianglesPerObstacle * verticesPerTriangle
+  GL.drawArrays Triangles 0 (fromIntegral vertexCount)
   GL.bindBuffer GL.ArrayBuffer $= Nothing
   GL.clientState GL.VertexArray $= Disabled
   GL.clientState GL.NormalArray $= Disabled
@@ -359,9 +359,9 @@ refreshRate = do
   rr ← GLFW.getWindowRefreshRate
   return $ mrr `orElse` fromIntegral rr
 
-gui :: Controller c ⇒ SV.Vector StoredVertex → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
+gui :: Controller c ⇒ [VisualObstacle] → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
   (RefreshRate → c) → IO c
-gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
+gui obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
 
   deepseq tree $ do
 
@@ -373,7 +373,8 @@ gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initia
   rr ← refreshRate
 
   let
-    obstacleCount = SV.length storedObstacles `div` verticesPerObstacle
+    vertices = asStoredVertices obstacles
+    vertexCount = SV.length vertices
     initialState = State
       { controller = initialController rr
       , paused = True
@@ -417,9 +418,9 @@ gui storedObstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initia
   GL.colorMaterial $= Just (FrontAndBack, AmbientAndDiffuse)
 
   [obstacleBuffer] ← GL.genObjectNames 1
-  let size = fromIntegral obstacleCount * bytesPerObstacle
+  let size = fromIntegral (length obstacles) * bytesPerObstacle
   GL.bindBuffer GL.ArrayBuffer $= Just obstacleBuffer
-  GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons storedObstacles), GL.StaticDraw)
+  GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons vertices), GL.StaticDraw)
 
   bodyQuadric ← GLU.gluNewQuadric
 

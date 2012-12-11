@@ -3,7 +3,7 @@
 import Gui (gui)
 import Logic (Player(..), fire, Life(..), safeFuture, live, gunConfig, GameplayConfig(..), birth, SimulationConfig(..))
 import qualified Data.Map as Map
-import Math (VisualObstacle(..), GeometricObstacle, Ray(..), asStoredVertices, randomAngle, unitCirclePoint)
+import Math (VisualObstacle(..), GeometricObstacle, Ray(..), randomAngle, unitCirclePoint)
 import Data.AdditiveGroup ((^+^))
 import Data.VectorSpace ((^*))
 import Util ((.), loadConfig, getDataFileName, Any(Any))
@@ -53,12 +53,12 @@ main = do
   putStrLn $ show (length obstacles) ++ " obstacles."
 
   let
-    vertices = asStoredVertices (map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles)
+    vobstacles = map (VisualObstacle SlingSpace.Configuration.defaultObstacleColor) obstacles
     initialPosition = Vector3 0 1800 30000
     initialPlayer = Player (Ray initialPosition (Vector3 0 0 0)) Map.empty
 
   {-r ←-}
-  gui vertices tree guiConfig gunConfig 0 $ \(SimulationConfig gpCfg → simCfg) →
+  gui vobstacles tree guiConfig gunConfig 0 $ \(SimulationConfig gpCfg → simCfg) →
     let
       stalker = live tree simCfg (Player (Ray (Vector3 0 1800 (-2000)) (Vector3 0 0 0)) Map.empty)
     in
