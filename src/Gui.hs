@@ -150,33 +150,19 @@ onReshape CameraConfig{..} w h = do
   GL.matrixMode $= GL.Modelview 0
 
 onKey :: GuiConfig → GLFW.Key → State c → State c
-onKey
-    GuiConfig{camConf=CameraConfig{..}, ..}
-    k state@State{..}
+onKey GuiConfig{..} k state@State{..}
   | k == pause_key = state{paused=not paused}
   | otherwise = state
 
 keyCallback :: GuiConfig → IORef (State c) → GLFW.KeyCallback
-keyCallback guiConfig@GuiConfig{camConf=CameraConfig{..}} stateRef k b = when b $ do
-  let
-    updateOrientation x y c@CameraOrientation{..} = c{
-      cam_xrot = cam_xrot + (if invert_mouse then negate else id) (fromIntegral y / mouse_speed),
-      cam_yrot = cam_yrot + fromIntegral x / mouse_speed }
+keyCallback guiConfig stateRef k b = when b $ do
   s ← readIORef stateRef
   let s' = onKey guiConfig k s
   writeIORef stateRef s'
   when (paused s /= paused s') $
     if paused s'
-      then do
-        GLFW.setMousePositionCallback $ \_ _ → return ()
-        GLFW.enableMouseCursor
-      else do
-        GLFW.disableMouseCursor
-        r ← GLFW.getMousePosition >>= newIORef
-        GLFW.setMousePositionCallback $ \x' y' → do
-          (x, y) ← readIORef r
-          writeIORef r (x', y')
-          modifyIORef' stateRef $ \st → st{camera=updateOrientation (x' - x) (y' - y) (camera st)}
+      then GLFW.enableMouseCursor
+      else GLFW.disableMouseCursor
 
 glfwLoop :: Controller c ⇒ State c → Gui (State c)
 glfwLoop initialState = do
@@ -188,7 +174,7 @@ glfwLoop initialState = do
 
   GLFW.setWindowBufferSwapInterval 1
 
-  GLFW.setWindowSizeCallback (onReshape camConf)
+  GLFW.setWindowSizeCallback $ onReshape camConf
   GLFW.setKeyCallback $ keyCallback guiConfig stateRef
   GLFW.setMouseWheelCallback $ \p → let (l, u) = wheelBounds in if
       | p < l → GLFW.setMouseWheel l
@@ -199,20 +185,20 @@ glfwLoop initialState = do
       s{guns=Map.adjust (\gs → gs { fireState = if b then FireAsap else ReleaseAsap }) g (guns s)}
     Nothing → return ()
 
-  closeRef ← newIORef False
-  GLFW.setWindowCloseCallback $ writeIORef closeRef True >> return True
-
-  GLFW.resetTime
   fix $ \loop → do
     state ← readIORef stateRef
     s ← runReaderT (guiTick state) context
-    writeIORef stateRef s
-    runReaderT (drawEverything s) context
+    (mx, my) ← GLFW.getMousePosition
+    let s' = s{camera=(camera s){
+      cam_xrot = (if invert_mouse then negate else id) (fromIntegral my / mouse_speed),
+      cam_yrot = fromIntegral mx / mouse_speed}}
+    writeIORef stateRef s'
+    runReaderT (drawEverything s') context
     GLFW.swapBuffers
     GLFW.pollEvents
     b ← GLFW.keyIsPressed exit_key
-    c ← readIORef closeRef
-    unless (b || c) loop
+    o ← GLFW.windowIsOpen
+    unless (b || not o) loop
 
   readIORef stateRef
 
