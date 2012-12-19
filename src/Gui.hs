@@ -14,8 +14,7 @@ import Data.VectorSpace ((^*), normalized)
 import Data.Maybe (isJust, mapMaybe)
 import Data.Traversable (mapM, forM)
 import Data.Typeable (Typeable)
-import Control.Monad (when, forM_, unless)
-import Control.Monad.RWS (execRWST)
+import Control.Monad (when, forM_)
 import Control.Monad.State (runState)
 import Control.Monad.State.Class (MonadState(get, put), modify)
 import Control.Monad.Reader.Class (MonadReader(ask), asks)
@@ -82,7 +81,7 @@ data GuiConfig = GuiConfig
   , playerSize :: GLdouble
   , camConf :: CameraConfig
   , schemeFile :: String
-  , restart_key, pause_key, exit_key :: GLFW.Key
+  , restart_key, pause_key :: GLFW.Key
   , gunForButton :: GLFW.MouseButton → Maybe Gun
   } deriving Typeable
 
@@ -93,8 +92,7 @@ data Static = Static
   , guiConfig :: GuiConfig
   , gunConfig :: Gun → GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
   , vertexCount :: Int
-  , tree :: ObstacleTree
-  , poll :: IO [Event] }
+  , tree :: ObstacleTree }
 
 
 -- Dynamic data:
@@ -115,7 +113,7 @@ data State c = State
 
 -- Drawers:
 
-type Drawer a = ∀ m . (MonadReader Static m, MonadIO m) ⇒ m a
+type Drawer = (MonadReader Static m, MonadIO m) ⇒ m ()
 
 rotateRadians :: (Floating c, GL.MatrixComponent c) ⇒ c → Vector3 c → IO ()
 rotateRadians r = GL.rotate (r / pi * 180)
@@ -123,7 +121,7 @@ rotateRadians r = GL.rotate (r / pi * 180)
 ballLight :: GL.Light
 ballLight = GL.Light 0
 
-drawEverything :: Controller c ⇒ State c → Drawer ()
+drawEverything :: Controller c ⇒ State c → Drawer
 drawEverything State{camera=CameraOrientation{..}, ..} = do
   liftIO $ do
     GL.clear [GL.ColorBuffer, GL.DepthBuffer]
@@ -144,7 +142,7 @@ drawEverything State{camera=CameraOrientation{..}, ..} = do
   drawRopes $ mapMaybe birth $ players controller
   drawCrossHairs guns
 
-drawFloor :: Player → Drawer ()
+drawFloor :: Player → Drawer
 drawFloor Player{..} = do
   Scheme{..} ← asks scheme
   GuiConfig{camConf=CameraConfig{..}, ..} ← asks guiConfig
@@ -172,7 +170,7 @@ drawFloor Player{..} = do
             forM_ [(aligned_x + x', aligned_z + z') | x' ← [-vd, -vd + (fromInteger grid_size) .. vd], z' ← [-vd, -vd + (fromInteger grid_size) .. vd]] $ \(x', z') →
               GL.vertex $ tov $ Vector3 x' 0 z'
 
-drawCrossHairs :: Guns → Drawer ()
+drawCrossHairs :: Guns → Drawer
 drawCrossHairs guns = do
   scheme ← asks scheme
   guiConfig ← asks guiConfig
@@ -192,7 +190,7 @@ drawCrossHairs guns = do
       , Vertex3 (1 :: GLdouble) 0 (-100)
       , Vertex3 (0 :: GLdouble) 1 (-100) ]
 
-drawRopes :: [Player] → Drawer ()
+drawRopes :: [Player] → Drawer
 drawRopes ps = do
   Scheme{..} ← asks scheme
   GuiConfig{..} ← asks guiConfig
@@ -205,7 +203,7 @@ drawRopes ps = do
         GL.vertex $ tov $ rayOrigin rope_ray
   return ()
 
-drawObstacles :: Drawer ()
+drawObstacles :: Drawer
 drawObstacles = do
   Static{scheme=Scheme{..}, ..} ← ask
   liftIO $ do
@@ -231,7 +229,7 @@ drawObstacles = do
   GL.clientState GL.NormalArray $= Disabled
   GL.clientState GL.ColorArray $= Disabled
 
-drawPlayers :: [Player] → Drawer ()
+drawPlayers :: [Player] → Drawer
 drawPlayers p = do
   Static{scheme=Scheme{..}, guiConfig=GuiConfig{..}, bodyQuadric} ← ask
   liftIO $ do
@@ -253,26 +251,22 @@ green = Color4 0 1 0 1
 
 -- Mechanics:
 
+gui :: Controller c ⇒ [VisualObstacle] → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
+  (RefreshRate → c) → IO c
+gui obstacles tree guiConfig gunConfig initialCamYrot initialController =
+  Control.DeepSeq.deepseq tree $
+    controller . GLFWutil.window
+      drawEverything
+      (initialize obstacles tree guiConfig gunConfig initialCamYrot initialController)
+      onEvent
+      gtick
+
 initialize :: [VisualObstacle] → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
-  (RefreshRate → c) → IO (Static, State c)
-initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController = do
+  (RefreshRate → c) → Int → IO (Static, State c)
+initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initialController rr = do
 
   scheme@Scheme{..} :: Scheme
     ← getDataFileName "schemes" >>= loadConfig . (++ "/" ++ schemeFile)
-
-  True ← GLFW.initialize
-
-  rr ← GLFWutil.getWindowRefreshRate
-
-  True ← GLFW.openWindow GLFW.defaultDisplayOptions
-    { GLFW.displayOptions_numRedBits = 8
-    , GLFW.displayOptions_numGreenBits = 8
-    , GLFW.displayOptions_numBlueBits = 8
-    , GLFW.displayOptions_numDepthBits = 1
-    }
-
-  GLFW.disableAutoPoll
-  poll ← GLFWutil.prepareListPoll
 
   GL.depthFunc $= Just GL.Lequal
   GL.clearColor $= fog_color
@@ -301,8 +295,6 @@ initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initi
 
   bodyQuadric ← GLU.gluNewQuadric
 
-  GLFW.setWindowBufferSwapInterval 1
-
   return
     ( Static
       { vertexCount = SV.length vertices, .. }
@@ -313,32 +305,6 @@ initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initi
       , guns = Map.fromList
           [ (LeftGun, ClientGunState Nothing Idle)
           , (RightGun, ClientGunState Nothing Idle) ] } )
-
-gui :: Controller c ⇒ [VisualObstacle] → ObstacleTree → GuiConfig → (Gun → GunConfig) → GLdouble →
-  (RefreshRate → c) → IO c
-gui obstacles tree guiConfig gunConfig initialCamYrot initialController = do
-  Control.DeepSeq.deepseq tree $ do
-  (r, ()) ← initialize obstacles tree guiConfig gunConfig initialCamYrot initialController
-    >>= uncurry (execRWST loop)
-  GLFW.closeWindow
-  GLFW.terminate
-  return $ controller r
-
-loop :: (Controller c, MonadReader Static m, MonadState (State c) m, MonadIO m) ⇒ m ()
-loop = do
-  get >>= drawEverything
-  p ← asks poll
-  liftIO (GLFW.swapBuffers >> p) >>= mapM onEvent
-  s ← get
-  when (paused s == Nothing) $ whenJust (birth $ player (controller s)) $ \Player{body} → do
-    static ← ask
-    let
-      (newGuns, newController) =
-        runState (Map.traverseWithKey (fireGuns static (camera s) (rayOrigin body)) (guns s)) (controller s)
-    put s{controller=tick newController, guns=newGuns}
-  b ← asks (exit_key . guiConfig) >>= liftIO . GLFW.keyIsPressed
-  o ← liftIO $ GLFW.windowIsOpen
-  unless (b || not o) loop
 
 onEvent :: (MonadReader Static m, MonadState (State c) m, MonadIO m) ⇒ Event → m ()
 onEvent e = do
@@ -372,6 +338,16 @@ onEvent e = do
       GLU.gluPerspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
       GL.matrixMode $= GL.Modelview 0
     _ → return ()
+
+gtick :: (Controller c, MonadReader Static m, MonadState (State c) m, MonadIO m) ⇒ m ()
+gtick = do
+  s ← get
+  when (paused s == Nothing) $ whenJust (birth $ player (controller s)) $ \Player{body} → do
+    static ← ask
+    let
+      (newGuns, newController) =
+        runState (Map.traverseWithKey (fireGuns static (camera s) (rayOrigin body)) (guns s)) (controller s)
+    put s{controller=tick newController, guns=newGuns}
 
 fireGuns :: (Controller c, MonadState c m) ⇒ Static → CameraOrientation → V → Gun → ClientGunState → m ClientGunState
 fireGuns Static{..} o playerPos g ClientGunState{..} = do

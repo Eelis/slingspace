@@ -46,7 +46,6 @@ instance Default GuiConfig where
     , schemeFile = "cool.hs"
     , restart_key = GLFW.CharKey ' '
     , pause_key = GLFW.CharKey 'P'
-    , exit_key = GLFW.CharKey 'Q'
     , gunForButton = \case
         GLFW.MouseButton0 → Just LeftGun
         GLFW.MouseButton1 → Just RightGun
