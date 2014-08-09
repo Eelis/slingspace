@@ -44,11 +44,11 @@ instance Default GuiConfig where
     , playerSize = 35
     , camConf = def
     , schemeFile = "cool.hs"
-    , restart_key = GLFW.CharKey ' '
-    , pause_key = GLFW.CharKey 'P'
+    , restart_key = ' '
+    , pause_key = 'p'
     , gunForButton = \case
-        GLFW.MouseButton0 → Just LeftGun
-        GLFW.MouseButton1 → Just RightGun
+        GLFW.MouseButton'1 → Just LeftGun
+        GLFW.MouseButton'2 → Just RightGun
         _ → Nothing }
 
 defaultObstacleColor :: Color3 GLdouble
