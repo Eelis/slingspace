@@ -66,7 +66,8 @@ data CameraConfig = CameraConfig
   { viewing_dist :: GLdouble
   , fov :: GLdouble -- in degrees
   , wheelBounds :: (Int, Int)
-  , zoom :: Int → GLdouble
+  , initial_cam_dist :: Double
+  , zoom :: Double → Double → Double -- params: previous camera distance, scroll offset
   , mouse_speed :: GLdouble -- in pixels per radian
   , invert_mouse :: Bool
   }
@@ -301,44 +302,44 @@ initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initi
     , State
       { controller = initialController (fromIntegral rr)
       , paused = Just (0, 0)
-      , camera = CameraOrientation (zoom camConf 0) 0 initialCamYrot
+      , camera = CameraOrientation (realToFrac $ initial_cam_dist camConf) 0 initialCamYrot
       , guns = Map.fromList
           [ (LeftGun, ClientGunState Nothing Idle)
           , (RightGun, ClientGunState Nothing Idle) ] } )
 
-onEvent :: (MonadReader Static m, MonadState (State c) m, MonadIO m) ⇒ Event → m ()
+onEvent :: (Controller c, MonadReader Static m, MonadState (State c) m, MonadIO m) ⇒ Event → m ()
 onEvent e = do
   Static{guiConfig=GuiConfig{camConf=CameraConfig{..}, ..}, ..} ← ask
   case e of
-
     MouseButtonEvent _ but b _ → whenJust (gunForButton but) $ \g → modify $ \s →
         s{guns=Map.adjust (\gs → gs { fireState =
           if b == GLFW.MouseButtonState'Pressed then FireAsap else ReleaseAsap }) g (guns s)}
-
-    ScrollEvent _ _ offset ->
-    {-
-      | p < fst wheelBounds → liftIO $ GLFW.setMouseWheel $ fst wheelBounds
-      | p > snd wheelBounds → liftIO $ GLFW.setMouseWheel $ snd wheelBounds
-      | otherwise → 
-    -}
-      modify $ \s → s { camera = (camera s){cam_dist = cam_dist (camera s) + realToFrac offset } }
+    ScrollEvent _ _ offset -> modify $ \s → s { camera = (camera s)
+        {cam_dist = realToFrac $ zoom (realToFrac $ cam_dist $ camera s) offset} }
     MousePositionEvent _ x y → do
       s ← get
       when (paused s == Nothing) $ put s { camera = (camera s){
         cam_xrot = (if invert_mouse then negate else id) (realToFrac y / mouse_speed),
         cam_yrot = realToFrac x / mouse_speed} }
-    CharEvent w c | c == pause_key → do
-      s ← get
-      case paused s of
-        Just p → do
-          liftIO $ do
-            GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
-            uncurry (GLFW.setCursorPos w) p
-          put s{paused=Nothing}
-        Nothing → do
-          p ← liftIO $ GLFW.getCursorPos w
-          liftIO $ GLFW.setCursorInputMode w GLFW.CursorInputMode'Normal
-          put s{paused=Just p}
+    CharEvent w ch
+      | ch == pause_key → do
+        s ← get
+        case paused s of
+          Just p → do
+            liftIO $ do
+              GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
+              uncurry (GLFW.setCursorPos w) p
+            put s{paused=Nothing}
+          Nothing → do
+            p ← liftIO $ GLFW.getCursorPos w
+            liftIO $ GLFW.setCursorInputMode w GLFW.CursorInputMode'Normal
+            put s{paused=Just p}
+      | otherwise → do
+        liftIO $ print ch
+        s <- get
+        case onChar (controller s) ch of
+          Nothing -> return ()
+          Just c -> put s{controller=c}
     WindowSizeEvent _ w h → liftIO $ do
       GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
       GL.matrixMode $= GL.Projection

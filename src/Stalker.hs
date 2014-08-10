@@ -43,3 +43,4 @@ instance BasicController c ⇒ Controller (Stalker c) where
   others Stalker{..} = stalker : others stalked
   tick c = stalk (c{stalker = future (stalker c)}) (tick (stalked c))
   fire g v c = stalk c `fmap` fire g v (stalked c)
+  onChar c ch = stalk c `fmap` onChar (stalked c) ch

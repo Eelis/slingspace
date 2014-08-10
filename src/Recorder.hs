@@ -13,6 +13,7 @@ instance Controller c ⇒ Controller (Recorder c) where
   others = others . recordee
   tick Recorder{..} = Recorder (mapMaybe birth (players recordee) : frames) (tick recordee)
   fire g v Recorder{..} = Recorder frames `fmap` fire g v recordee
+  onChar Recorder{..} ch = Recorder frames `fmap` onChar recordee ch
 
 record :: c → Recorder c
 record = Recorder []

@@ -14,6 +14,8 @@ class Controller c where
   others = const []
   tick :: c → c
   tick = id
+  onChar :: c → Char → Maybe c
+  onChar _ = const Nothing
   fire :: Gun → Maybe V → c → Maybe c -- a Nothing V means release
   fire _ _ _ = Nothing
   -- fire returns Maybes so that the controller can say "nope, you can't fire/release now"
@@ -22,6 +24,7 @@ instance Controller (Any Controller) where -- ghc /should/ be able to generate t
   player (Any c) = player c
   others (Any c) = others c
   tick (Any c) = Any (tick c)
+  onChar (Any c) ch = Any `fmap` onChar c ch
   fire g v (Any c) = Any `fmap` fire g v c
 
 players :: Controller c ⇒ c → [Life]
@@ -40,6 +43,7 @@ instance Controller (Any BasicController) where -- ghc /should/ be able to gener
   player (Any c) = player c
   others (Any c) = others c
   tick (Any c) = Any (tick c)
+  onChar (Any c) ch = Any `fmap` onChar c ch
   fire g v (Any c) = Any `fmap` fire g v c
 
 instance BasicController (Any BasicController) where -- ghc /should/ be able to generate this

@@ -32,6 +32,8 @@ instance BasicController C where
 instance Controller C where
   player = life
   tick c@C{..} = c{life=safeFuture (controllerObstacles c) (controllerConfig c) life}
+  onChar _ ' ' = error "exit"
+  onChar _ _ = Nothing
   fire g v c@C{..} = do
     l ← live (controllerObstacles c) (controllerConfig c) . Logic.fire simCfg g v . birth life
     return c{life=l}
