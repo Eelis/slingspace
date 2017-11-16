@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, TypeOperators, TypeFamilies, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards, ViewPatterns, BangPatterns, UnicodeSyntax, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, NamedFieldPuns, TypeOperators, TypeFamilies, FlexibleContexts, DeriveGeneric, DeriveAnyClass, StandaloneDeriving #-}
 
 module Math where
 
@@ -22,6 +22,7 @@ import Data.AdditiveGroup (AdditiveGroup, (^+^), (^-^))
 import Data.VectorSpace (VectorSpace, Scalar, (^*), (^/), normalized, magnitudeSq, (<.>), InnerSpace)
 import Data.VectorSpace.OpenGL ()
 import Data.Cross (HasCross3(cross3))
+import GHC.Generics (Generic)
 
 -- RANDOM STUFF
 
@@ -47,7 +48,11 @@ randomVector3 size = getRandomR (Vector3 (-size) (-size) (-size), Vector3 size s
 
 type V = Vector3 GLdouble
 
+deriving instance Generic (Vector3 a)
+deriving instance NFData a => NFData (Vector3 a)
+
 data Matrix33 a = Matrix33 !(Vector3 a) !(Vector3 a) !(Vector3 a) -- three rows
+  deriving (Generic, NFData)
 
 scalar_matrix_mult :: VectorSpace (Vector3 a) ⇒ Scalar (Vector3 a) → Matrix33 a → Matrix33 a
 scalar_matrix_mult x (Matrix33 a b c) = Matrix33 (a ^* x) (b ^* x) (c ^* x)
@@ -81,6 +86,7 @@ data AnnotatedTriangle = AnnotatedTriangle
   , triangleCenter :: !V
   , toTriangleCoords :: !(Matrix33 GLdouble) -- maps world coordinates to triangle coordinates with (b-a, c-a, normal) as basis
   } -- should only ever be constructed using annotate_triangle
+  deriving (Generic, NFData)
 
 annotateTriangle :: (GLdouble ~ Scalar (Vector3 GLdouble)) => V → V → V → AnnotatedTriangle
 annotateTriangle a b c = AnnotatedTriangle{..}
@@ -95,11 +101,9 @@ annotateTriangle a b c = AnnotatedTriangle{..}
 newtype OriginRay = OriginRay V
 
 data Ray = Ray { rayOrigin, rayDirection :: !V }
-data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble }
-data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) }
+data Sphere = Sphere { sphereCenter :: !V, sphereSquaredRadius :: !GLdouble } deriving (Generic, NFData)
+data Cube = Cube { cubeLoCorner, cubeHiCorner :: !(Vector3 GLdouble) } deriving (Generic, NFData)
   -- Cube invariant: components of lo <= hi
-
-instance NFData Cube
 
 class FitsIn o c where fitsIn :: o → c → Bool
 
@@ -255,6 +259,7 @@ instance Collision AnnotatedTriangle AnnotatedTriangle Bool where
 data GeometricObstacle = GeometricObstacle
   { obstacleSphere :: !Sphere
   , obstacleTriangles :: ![AnnotatedTriangle] }
+  deriving (Generic, NFData)
 
 triangleCube :: AnnotatedTriangle -> Cube
 triangleCube AnnotatedTriangle{triangleVertices=(Vector3 x y z, Vector3 x' y' z', Vector3 x'' y'' z'')} =
@@ -284,9 +289,6 @@ bytesPerTriangle = verticesPerTriangle * bytesPerVertex
 bytesPerVertex = fromIntegral $ sizeOf (undefined :: StoredVertex)
 bytesPerDouble = fromIntegral $ sizeOf (undefined :: Double)
 bytesPerVector = fromIntegral $ sizeOf (undefined :: Vector3 GLdouble)
-
-
-instance NFData GeometricObstacle
 
 data VisualObstacle = VisualObstacle
   { obstacleColor :: !(Color3 GLdouble)

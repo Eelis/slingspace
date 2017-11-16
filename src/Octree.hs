@@ -1,4 +1,4 @@
-{-# LANGUAGE UnicodeSyntax, RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns, FlexibleInstances #-}
+{-# LANGUAGE UnicodeSyntax, RecordWildCards, NamedFieldPuns, FlexibleContexts, PatternGuards, BangPatterns, FlexibleInstances, DeriveGeneric, DeriveAnyClass #-}
 
 module Octree (Box, CubeBox, empty, query, insert, toList, fromList, subs) where
 
@@ -8,6 +8,7 @@ import Data.AdditiveGroup ((^+^), (^-^))
 import Data.VectorSpace ((^*), (^/))
 import Util (orElse)
 import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -46,8 +47,7 @@ mapFirstV v f = Vector.fromList `fmap` mapFirst (Vector.toList v) f
 data Box c a = Box
   { objects :: ![a] -- which don't fit into smaller boxes
   , subBoxes :: !(Subs c a) }
-
-instance (NFData c, NFData a) ⇒ NFData (Box c a)
+  deriving (Generic, NFData)
 
 type CubeBox c a = (c, Box c a)
 
