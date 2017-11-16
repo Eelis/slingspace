@@ -38,8 +38,8 @@ import qualified Graphics.UI.GLFW as GLFW
 import qualified GLFWutil
 import qualified Control.DeepSeq
 import qualified Graphics.Rendering.OpenGL.GL as GL
-import qualified Graphics.Rendering.GLU.Raw as GLU
-
+import qualified Graphics.Rendering.OpenGL.GLU as GLU
+import qualified Graphics.Rendering.OpenGL.GLU.Quadrics as Quadrics
 
 -- Static data:
 
@@ -88,7 +88,6 @@ data GuiConfig = GuiConfig
 
 data Static = Static
   { obstacleBuffer :: GL.BufferObject
-  , bodyQuadric :: Ptr GLU.GLUquadric
   , scheme :: Scheme
   , guiConfig :: GuiConfig
   , gunConfig :: Gun → GunConfig -- not part of GuiConfig because gunConfig is normally read from a gameplay config file
@@ -114,7 +113,7 @@ data State c = State
 
 -- Drawers:
 
-type Drawer = (MonadReader Static m, MonadIO m) ⇒ m ()
+type Drawer = forall m . (MonadReader Static m, MonadIO m) ⇒ m ()
 
 rotateRadians :: (Floating c, GL.MatrixComponent c) ⇒ c → Vector3 c → IO ()
 rotateRadians r = GL.rotate (r / pi * 180)
@@ -138,7 +137,7 @@ drawEverything State{camera=CameraOrientation{..}, ..} = do
   drawPlayers $ mapMaybe birth $ players controller
   drawObstacles
   liftIO $ GL.lighting $= Disabled
-  --lift $ drawFutures players
+  liftIO $ drawFutures $ players controller
   drawFloor me
   drawRopes $ mapMaybe birth $ players controller
   drawCrossHairs guns
@@ -232,13 +231,19 @@ drawObstacles = do
 
 drawPlayers :: [Player] → Drawer
 drawPlayers p = do
-  Static{scheme=Scheme{..}, guiConfig=GuiConfig{..}, bodyQuadric} ← ask
+  Static{scheme=Scheme{..}, guiConfig=GuiConfig{..}} ← ask
   liftIO $ do
   GL.materialAmbient GL.Front $= ball_material_ambient
   GL.materialDiffuse GL.Front $= ball_material_diffuse
   forM p $ \Player{..} → GL.preservingMatrix $ do
     GL.translate $ rayOrigin body
-    GLU.gluSphere bodyQuadric playerSize 20 20
+    let
+      style = Quadrics.QuadricStyle
+        (Just GL.Smooth)
+        Quadrics.NoTextureCoordinates
+        Quadrics.Outside
+        Quadrics.FillStyle
+    Quadrics.renderQuadric style (Quadrics.Sphere playerSize 20 20)
   return ()
 
 drawFutures :: [Life] → IO ()
@@ -294,8 +299,6 @@ initialize obstacles tree guiConfig@GuiConfig{..} gunConfig initialCamYrot initi
   let vertices = asStoredVertices obstacles
   GL.bufferData GL.ArrayBuffer $= (size, SVP.ptr (SVP.cons vertices), GL.StaticDraw)
 
-  bodyQuadric ← GLU.gluNewQuadric
-
   return
     ( Static
       { vertexCount = SV.length vertices, .. }
@@ -344,7 +347,7 @@ onEvent e = do
       GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
       GL.matrixMode $= GL.Projection
       GL.loadIdentity
-      GLU.gluPerspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
+      GLU.perspective fov (fromIntegral w / fromIntegral h) 10 viewing_dist
       GL.matrixMode $= GL.Modelview 0
     _ → return ()
 
