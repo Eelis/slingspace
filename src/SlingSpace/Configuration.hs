@@ -41,7 +41,8 @@ instance Default GuiConfig where
     { windowTitle = "SlingSpace"
     , gunGuiConfig = GunGuiConfig (-0.12) . (\case LeftGun → -0.19; RightGun → 0.19)
     , ugly = False
-    , floorConf = Just (Grid { grid_size = 200, grid_type = LinedGrid {grid_line_width=3} })
+    , floorConf = Nothing -- Just (Grid { grid_size = 200, grid_type = LinedGrid {grid_line_width=3} })
+        -- Todo: Grid drawing seems to have become really slow.. :/
     , playerSize = 35
     , camConf = def
     , schemeFile = "cool.hs"
